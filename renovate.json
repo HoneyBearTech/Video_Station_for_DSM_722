@@ -21,5 +21,6 @@
   "vulnerabilityAlerts": {
     "labels": ["security"]
   },
-  "automerge": false
+  "automerge": false,
+  "osvVulnerabilityAlerts": true
 }
