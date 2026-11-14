@@ -21,27 +21,132 @@
 # It looks like Synology were developing a new video station for DSM 7.2.2
 # before someone decided to scrap it and cannibalise AME to save a few dollars
 #------------------------------------------------------------------------------
-# TODO
-# Figure out how to install already downloaded package to specific volume
-# Figure out where package center saves it's settings
-# Figure out how to run VideoStation 3.1.1-3168 with CodecPack 3.1.0-3005
-#   or add OpenSubtitle changes from 3.1.1-3168 to 3.1.0-3153
+# Compatibility research and remaining device checks: docs/compatibility.md
 #------------------------------------------------------------------------------
 
-scriptver="v1.4.22"
+scriptver="v1.4.23"
 script=Video_Station_for_DSM_722
 repo="007revad/Video_Station_for_DSM_722"
 scriptname=videostation_for_722
 
-ding(){ 
+ding(){
     printf \\a
 }
 
 # Save options used for getopt
 args=("$@")
+install_volume=""
 
-if [[ $1 == "--trace" ]] || [[ $1 == "-t" ]]; then
-    trace="yes"
+usage(){
+    cat <<EOF
+Usage: $(basename "$0") [options]
+
+Options:
+  -h, --help            Show this help message
+  -v, --version         Show the script version
+  -t, --trace           Show package operation trace messages
+      --volume=PATH     Install new packages on an internal volume (e.g. /volume2)
+                        Requires jq and the accompanying lib directory
+      --install=OPTION  Automatically install OPTION (for use when scheduled)
+                        OPTION can be either:
+                          'all' to install Video Station, Media Server and
+                            Advanced Media Codecs
+                          'novs' to install all except Video Station
+                          'noms' to install all except Media Server
+                          'onlyamc' to only install Advanced Media Codecs
+                        Examples:
+                          videostation_for_722.sh --install=all
+                          videostation_for_722.sh --install=novs
+                          videostation_for_722.sh --install=noms
+                          videostation_for_722.sh --install=onlyamc
+
+EOF
+}
+
+scriptversion(){
+    cat <<EOF
+$script $scriptver - by 007revad
+
+See https://github.com/$repo
+EOF
+    exit 0
+}
+
+
+# Check for flags with getopt
+if options="$(getopt -o hvt -l \
+    install:,volume:,help,version,trace -- "${args[@]}")"; then
+    eval set -- "$options"
+    while true; do
+        case "${1,,}" in
+            -h|--help)          # Show usage options
+                usage
+                exit
+                ;;
+            -v|--version)       # Show script version
+                scriptversion
+                ;;
+            -t|--trace)
+                trace="yes"
+                ;;
+            --volume)
+                if [[ ! $2 =~ ^/volume[1-9][0-9]*$ ]]; then
+                    echo "Invalid --volume value: $2" >&2
+                    usage
+                    exit 2
+                fi
+                install_volume="$2"
+                shift
+                ;;
+            --install)             # Specify pkgs to install or skip
+                color=no        # Disable colour text in task scheduler emails
+                if [[ ${2,,} == "all" ]]; then
+                    auto="yes"
+                    choice="Installing All"
+                elif [[ ${2,,} == "novs" ]]; then
+                    auto="yes"
+                    no_vs="yes"
+                    choice="Skipping Video Station"
+                elif [[ ${2,,} == "noms" ]]; then
+                    auto="yes"
+                    no_ms="yes"
+                    choice="Skipping Media Server"
+                elif [[ ${2,,} == "onlyamc" ]]; then
+                    auto="yes"
+                    no_vs="yes"
+                    no_ms="yes"
+                    choice="Only installing Advanced Media Codecs"
+                else
+                    ding
+                    echo -e "Invalid --install value: $2\n"
+                    usage
+                    exit 2  # Missing argument
+                fi
+                shift
+                ;;
+            --)
+                shift
+                break
+                ;;
+            *)                  # Show usage options
+                ding
+                echo -e "Invalid option '$1'\n"
+                usage
+                exit 2  # Invalid argument
+                ;;
+        esac
+        shift
+    done
+else
+    echo
+    usage
+    exit 2
+fi
+
+if [[ $# -gt 0 ]]; then
+    echo "Unexpected argument: $1" >&2
+    usage
+    exit 2
 fi
 
 # Check script is running as root
@@ -86,114 +191,6 @@ else
 fi
 
 
-usage(){ 
-    cat <<EOF
-Usage: $(basename "$0") [options]
-
-Options:
-  -h, --help            Show this help message
-  -v, --version         Show the script version
-      --install=OPTION  Automatically install OPTION (for use when scheduled)
-                        OPTION can be either: 
-                          'all' to install Video Station, Media Server and
-                            Advanced Media Codecs
-                          'novs' to install all except Video Station
-                          'noms' to install all except Media Server
-                          'onlyamc' to only install Advanced Media Codecs
-                        Examples:
-                          videostation_for_722.sh --install=all
-                          videostation_for_722.sh --install=novs
-                          videostation_for_722.sh --install=noms
-                          videostation_for_722.sh --install=onlyamc
-
-EOF
-}
-
-scriptversion(){ 
-    cat <<EOF
-$script $scriptver - by 007revad
-
-See https://github.com/$repo
-EOF
-    exit 0
-}
-
-
-autoupdate=""
-
-# Check for flags with getopt
-if options="$(getopt -o abcdefghijklmnopqrstuvwxyz0123456789 -l \
-    autoupdate:,install:,help,version,log,debug -- "${args[@]}")"; then
-    eval set -- "$options"
-    while true; do
-        case "${1,,}" in
-            -h|--help)          # Show usage options
-                usage
-                exit
-                ;;
-            -v|--version)       # Show script version
-                scriptversion
-                ;;
-            -l|--log)           # Log
-                log=yes
-                ;;
-            -d|--debug)         # Show and log debug info
-                debug=yes
-                ;;
-            --install)             # Specify pkgs to install or skip
-                color=no        # Disable colour text in task scheduler emails
-                if [[ ${2,,} == "all" ]]; then
-                    auto="yes"
-                    choice="Installing All"
-                elif [[ ${2,,} == "novs" ]]; then
-                    auto="yes"
-                    no_vs="yes"
-                    choice="Skipping Video Station"
-                elif [[ ${2,,} == "noms" ]]; then
-                    auto="yes"
-                    no_ms="yes"
-                    choice="Skipping Media Server"
-                elif [[ ${2,,} == "onlyamc" ]]; then
-                    auto="yes"
-                    no_vs="yes"
-                    no_ms="yes"
-                    choice="Only installing Advanced Media Codecs"
-                else
-                    ding
-                    echo -e "Missing argument to auto!\n"
-                    usage
-                    exit 2  # Missing argument
-                fi
-                shift
-                ;;
-            --autoupdate)       # Auto update script
-                autoupdate=yes
-                if [[ $2 =~ ^[0-9]+$ ]]; then
-                    delay="$2"
-                    shift
-                else
-                    delay="0"
-                fi
-                ;;
-            --)
-                shift
-                break
-                ;;
-            *)                  # Show usage options
-                ding
-                echo -e "Invalid option '$1'\n"
-                usage
-                exit 2  # Invalid argument
-                ;;
-        esac
-        shift
-    done
-else
-    echo
-    usage
-    exit
-fi
-
 # Shell Colors
 if [[ $color != "no" ]]; then
     #Black='\e[0;30m'   # ${Black}
@@ -212,9 +209,6 @@ fi
 
 #------------------------------------------------------------------------------
 # Check latest release with GitHub API
-
-# Save options used
-args=("$@")
 
 # Get latest release info
 # Curl timeout options:
@@ -248,7 +242,7 @@ echo "Running from: ${scriptpath}/$scriptfile"
 #echo "scriptver: $scriptver"  # debug
 
 
-cleanup_tmp(){ 
+cleanup_tmp(){
     # Delete downloaded .tar.gz file
     if [[ -f "/tmp/$script-$shorttag.tar.gz" ]]; then
         if ! rm "/tmp/$script-$shorttag.tar.gz"; then
@@ -386,10 +380,22 @@ else
 fi
 echo "Using CPU type: $cputype"
 
+# Validate optional volume targeting before changing package limits or packages.
+if [[ -n $install_volume ]]; then
+    if [[ ! -f "$scriptpath/lib/package_volume.sh" ]]; then
+        echo "Volume targeting requires lib/package_volume.sh beside the installer." >&2
+        exit 2
+    fi
+    # shellcheck source=lib/package_volume.sh
+    source "$scriptpath/lib/package_volume.sh"
+    volume_require_tools && volume_check_target "$install_volume" || exit 2
+fi
+
 #------------------------------------------------------------------------------
 
-cleanup(){ 
+cleanup(){
     arg1=$?
+    if [[ -n $download_tmp ]]; then rm -f -- "$download_tmp"; fi
     for s in /tmp/CodecPack-"${cputype}"-*.spk; do rm -f "$s"; done
     for s in /tmp/VideoStation-"${cputype}"-*.spk; do rm -f "$s"; done
     for s in /tmp/MediaServer-"${cputype}"-*.spk; do rm -f "$s"; done
@@ -398,7 +404,7 @@ cleanup(){
 
 trap cleanup EXIT
 
-progbar(){ 
+progbar(){
     # $1 is pid of process
     # $2 is string to echo
     string="$2"
@@ -416,7 +422,7 @@ progbar(){
     done
 }
 
-progstatus(){ 
+progstatus(){
     # $1 is return status of process
     # $2 is string to echo
     # $3 line number function was called from
@@ -439,7 +445,7 @@ progstatus(){
     #echo "return: $1"  # debug
 }
 
-package_status(){ 
+package_status(){
     # $1 is package name
     [ "$trace" == "yes" ] && echo "${FUNCNAME[0]} called from ${FUNCNAME[1]}"
     /usr/syno/bin/synopkg status "${1}" >/dev/null
@@ -466,7 +472,7 @@ package_status(){
     fi
 }
 
-check_pkg_installed(){ 
+check_pkg_installed(){
     # $1 is package
     [ "$trace" == "yes" ] && echo "${FUNCNAME[0]} called from ${FUNCNAME[1]}"
     /usr/syno/bin/synopkg status "${1:?}" >/dev/null
@@ -478,7 +484,7 @@ check_pkg_installed(){
     fi
 }
 
-package_is_running(){ 
+package_is_running(){
     # $1 is package name
     [ "$trace" == "yes" ] && echo "${FUNCNAME[0]} called from ${FUNCNAME[1]}"
     /usr/syno/bin/synopkg is_onoff "${1}" >/dev/null
@@ -486,7 +492,7 @@ package_is_running(){
     return "$code"
 }
 
-wait_status(){ 
+wait_status(){
     # Wait for package to finish stopping or starting
     # $1 is package
     # $2 is start or stop
@@ -511,7 +517,7 @@ wait_status(){
     fi
 }
 
-package_stop(){ 
+package_stop(){
     # $1 is package name
     # $2 is package display name
     [ "$trace" == "yes" ] && echo "${FUNCNAME[0]} called from ${FUNCNAME[1]}"
@@ -527,7 +533,7 @@ package_stop(){
     wait_status "$1" stop
 }
 
-package_start(){ 
+package_start(){
     # $1 is package name
     # $2 is package display name
     [ "$trace" == "yes" ] && echo "${FUNCNAME[0]} called from ${FUNCNAME[1]}"
@@ -543,7 +549,7 @@ package_start(){
     wait_status "$1" start
 }
 
-package_uninstall(){ 
+package_uninstall(){
     # $1 is package name
     # $2 is package display name
     [ "$trace" == "yes" ] && echo "${FUNCNAME[0]} called from ${FUNCNAME[1]}"
@@ -555,29 +561,29 @@ package_uninstall(){
     progstatus "$?" "$string" "line ${LINENO}"
 }
 
-package_install(){ 
+package_install(){
     # $1 is package filename
     # $2 is package display name
-    # $3 is /volume2 etc
+    # $3 is package ID for targeted installation
     [ "$trace" == "yes" ] && echo "${FUNCNAME[0]} called from ${FUNCNAME[1]}"
-    #/usr/syno/bin/synopkg install_from_server "$1" "$3" >/dev/null &
-    /usr/syno/bin/synopkg install "/tmp/$1" "$3" >/dev/null &
-    pid=$!
-    if [[ $3 ]]; then
-        string="Installing ${Cyan}${2}${Off} on ${Cyan}$3${Off}"
+    if [[ -n $install_volume ]]; then
+        volume_install_spk "/tmp/$1" "$3" "$install_volume" >/dev/null &
     else
-        string="Installing ${Cyan}${2}${Off}"
+        /usr/syno/bin/synopkg install "/tmp/$1" >/dev/null &
     fi
+    pid=$!
+    string="Installing ${Cyan}${2}${Off}"
+    if [[ -n $install_volume ]]; then string+=" on $install_volume"; fi
     progbar "$pid" "$string"
     wait "$pid"
     progstatus "$?" "$string" "line ${LINENO}"
 }
 
-download_pkg(){ 
+download_pkg(){
     # $1 is the package folder name
     # $2 is the package version to download
     # $3 is the package file to download
-    
+
     # https://cndl.synology.cn/download/Package/spk/VideoStation/3.1.0-3153/VideoStation-x86_64-3.1.0-3153.spk
     # https://global.synologydownload.com/download/Package/spk/VideoStation/3.1.0-3153/VideoStation-x86_64-3.1.0-3153.spk
 
@@ -594,26 +600,32 @@ download_pkg(){
         bases+=("https://global.download.synology.com/download/Package/spk/")
         bases+=("https://cndl.synology.cn/download/Package/spk/")
     fi
-    if [[ ! -f "/tmp/${3:?}" ]]; then
+    if [[ ! -s "/tmp/${3:?}" ]]; then
+        download_tmp=$(mktemp "/tmp/${3}.XXXXXX") || exit 3
         for base in "${bases[@]}"; do
             url="${base}${1:?}/${2:?}/${3:?}"
             echo -en "\nDownloading ${Cyan}${3}${Off} from "
             echo "$base" | cut -d"/" -f3
-            #if curl -kfL --connect-timeout 30 --retry 5 --retry-all-errors "$url" -o "/tmp/$3"; then
-            if curl -kfL --connect-timeout 30 --retry 1 "$url" -o "/tmp/$3"; then
-                if [[ -f "/tmp/$3" ]]; then
-                    break
+            if curl -fL --connect-timeout 30 --retry 1 "$url" -o "$download_tmp" &&
+                    [[ -s $download_tmp ]]; then
+                if ! mv -f -- "$download_tmp" "/tmp/$3"; then
+                    rm -f -- "$download_tmp"
+                    exit 3
                 fi
+                download_tmp=""
+                break
             fi
         done
+        if [[ -n $download_tmp ]]; then
+            rm -f -- "$download_tmp"
+            download_tmp=""
+            ding
+            echo -e "${Error}ERROR 3${Off} Failed to download ${3}!" >&2
+            exit 3
+        fi
     fi
-    if [[ ! -f "/tmp/${3:?}" ]]; then
-        ding
-        echo -e "${Error}ERROR 3${Off} Failed to download ${3}!"
-        exit 3
-    else
-        echo ""
-    fi
+    echo ""
+
 }
 
 
@@ -659,6 +671,25 @@ else
     echo "$choice"
 fi
 
+
+# Fetch required packages before changing compatibility limits or uninstalling.
+# A failed mirror must not leave an existing installation removed.
+ame_version=$(/usr/syno/bin/synopkg version CodecPack)
+if ! check_pkg_installed CodecPack || [[ ${ame_version:0:1} -gt "3" ]]; then
+    download_pkg CodecPack "3.1.0-3005" "CodecPack-${cputype}-3.1.0-3005.spk"
+fi
+if [[ $no_vs != "yes" ]]; then
+    vs_version=$(/usr/syno/bin/synopkg version VideoStation)
+    if ! check_pkg_installed VideoStation || [[ $vs_version != "30.1.0-3153" ]]; then
+        download_pkg VideoStation "3.1.0-3153" "VideoStation-${cputype}-3.1.0-3153.spk"
+    fi
+fi
+if [[ $no_ms != "yes" ]]; then
+    ms_version=$(/usr/syno/bin/synopkg version MediaServer)
+    if ! check_pkg_installed MediaServer || [[ $ms_version != "20.0.5-3152" ]]; then
+        download_pkg MediaServer "2.0.5-3152" "MediaServer-${cputype}-2.0.5-3152.spk"
+    fi
+fi
 
 # Backup synopackageslimit.conf if needed
 if [[ ! -f /etc.defaults/synopackageslimit.conf.bak ]]; then
@@ -708,7 +739,7 @@ fi
 # CodecPack (Advanced Media Extensions)
 if ! check_pkg_installed CodecPack && [[ $ame_version != "30.1.0-3005" ]]; then
     download_pkg CodecPack "3.1.0-3005" "CodecPack-${cputype}-3.1.0-3005.spk"
-    package_install "CodecPack-${cputype}-3.1.0-3005.spk" "Advanced Media Extensions"
+    package_install "CodecPack-${cputype}-3.1.0-3005.spk" "Advanced Media Extensions" CodecPack
     package_stop CodecPack "Advanced Media Extensions"
     # Prevent package updating and "update available" messages
     echo "Preventing Advanced Media Extensions from auto updating"
@@ -722,17 +753,13 @@ fi
 # VideoStation
 if [[ $no_vs != "yes" ]]; then
     if ! check_pkg_installed VideoStation && [[ $vs_version != "30.1.0-3153" ]]; then
-        #download_pkg VideoStation "3.1.1-3168" "VideoStation-${cputype}-3.1.0-3168.spk"
         download_pkg VideoStation "3.1.0-3153" "VideoStation-${cputype}-3.1.0-3153.spk"
-        #package_install "VideoStation-${cputype}-3.1.1-3168.spk" "Video Station"
-        package_install "VideoStation-${cputype}-3.1.0-3153.spk" "Video Station"
+        package_install "VideoStation-${cputype}-3.1.0-3153.spk" "Video Station" VideoStation
         package_stop VideoStation "Video Station"
         # Prevent package updating and "update available" messages
         echo "Preventing Video Station from auto updating"
-        #/usr/syno/bin/synosetkeyvalue /var/packages/VideoStation/INFO version "30.1.1-3168"
         /usr/syno/bin/synosetkeyvalue /var/packages/VideoStation/INFO version "30.1.0-3153"
         package_start VideoStation "Video Station"
-        #rm -f "/tmp/VideoStation-${cputype}-3.1.0-3168.spk"
         rm -f "/tmp/VideoStation-${cputype}-3.1.0-3153.spk"
     else
         echo -e "\n${Cyan}Video Station${Off} $vs_version already installed"
@@ -743,7 +770,7 @@ fi
 if [[ $no_ms != "yes" ]]; then
     if ! check_pkg_installed MediaServer && [[ $ms_version != "20.0.5-3152" ]]; then
         download_pkg MediaServer "2.0.5-3152" "MediaServer-${cputype}-2.0.5-3152.spk"
-        package_install "MediaServer-${cputype}-2.0.5-3152.spk" "Media Server"
+        package_install "MediaServer-${cputype}-2.0.5-3152.spk" "Media Server" MediaServer
         package_stop MediaServer "Media Server"
         # Prevent package updating and "update available" messages
         echo "Preventing Media Server from auto updating"
@@ -794,4 +821,3 @@ echo " 1. Open Package Center > Installed"
 echo " 2. Click Advanced Media Extensions"
 echo " 3. Click on Open"
 echo -e " 4. Click on Install then OK \n"
-

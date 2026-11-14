@@ -23,4 +23,3 @@ Enabling the HEVC codec in Advanced Media Extensions requires you are signed in 
 
 <p align="center">Sign in popup</p>
 <p align="center"><img src="images/sign_in_popup.png"></p>
-

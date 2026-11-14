@@ -1,3 +1,18 @@
+v1.4.23 (unreleased)
+- Added local checks and regression tests for command parsing and downloads.
+- Help and version now exit before root checks or DSM access.
+- Invalid arguments now exit with status 2, and trace flags are parsed correctly.
+- Removed undocumented log, debug, and autoupdate flags that did nothing.
+- Preserved original arguments when restarting after a script update.
+- Failed or empty package downloads no longer become installable cached files.
+- Package downloads now verify TLS certificates.
+- Removed the unused, undocumented local package installation volume argument.
+- Added optional --volume=/volumeN local-package installation without changing global defaults.
+- Required downloads now complete before existing packages or compatibility limits change.
+- Located Package Center settings in three official DSM versions and added a read-only inspector.
+- Added an optional REST subtitle adapter with backup and restoration, preserving codec binaries.
+- Refreshed setup instructions and documented remaining device verification.
+
 v1.4.22
 - Changed to try 3 different Synology download domains to download the spk file(s).
 
@@ -8,7 +23,7 @@ v1.4.20
 - Bug fix for trying to start package that DSM was already starting. Issue #94
 
 v1.4.19
-- Added `--install=OPTION` option for use when the script is scheduled. OPTION can be either: 
+- Added `--install=OPTION` option for use when the script is scheduled. OPTION can be either:
   - 'all' to install Video Station, Media Server and Advanced Media Codecs.
   - 'novs' to install all except Video Station.
   - 'noms' to install all except Media Server.
