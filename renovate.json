@@ -1,5 +1,6 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": "Renovate proposes every dependency update and merges it on its next run (platformAutomerge is off). No checks run on pull requests in this repository (its only workflow uses no secrets), and a pull request with no status counts as pending, so ignoreTests is on: the 3-day wait is the only gate. A new version waits three days after its release (minimumReleaseAge); fixes for vulnerability alerts skip the wait by Renovate's default. timestamp-optional lets an update from a registry that reports no release date through. See https://docs.renovatebot.com/configuration-options/#minimumreleaseage",
   "extends": [
     "config:recommended",
     ":dependencyDashboard"
@@ -9,6 +10,12 @@
   "timezone": "America/Chicago",
   "schedule": ["before 6am on monday"],
   "packageRules": [
+    {
+      "description": "An image rebuild (a new digest under the same tag) doesn't wait: Docker Hub dates a rebuild by the tag's last push, so a tag rebuilt about weekly would restart the clock each time and never clear the wait.",
+      "matchDatasources": ["docker"],
+      "matchUpdateTypes": ["digest"],
+      "minimumReleaseAge": null
+    },
     {
       "matchUpdateTypes": ["minor", "patch"],
       "groupName": "minor and patch dependencies"
@@ -21,6 +28,12 @@
   "vulnerabilityAlerts": {
     "labels": ["security"]
   },
-  "automerge": false,
+  "automerge": true,
+  "automergeType": "pr",
+  "automergeStrategy": "squash",
+  "platformAutomerge": false,
+  "ignoreTests": true,
+  "minimumReleaseAge": "3 days",
+  "minimumReleaseAgeBehaviour": "timestamp-optional",
   "osvVulnerabilityAlerts": true
 }
