@@ -10,13 +10,26 @@ To run a script from Task Scheduler follow these steps:
 4. Select **root** as the user (The script needs to run as root).
 5. Untick **Enable** so it does **not** run on a schedule.
 6. Click **Task Settings**.
-7. In the box under **User-defined script** type the path to the script. 
-    - e.g. If you saved the script to a shared folder on volume 1 called "scripts" you'd type: **/volume1/scripts/videostation_for_722.sh**
+7. In the box under **User-defined script** type the path to the script.
+    - e.g. If you saved the script to a shared folder on volume 1 called "scripts" you'd type: `/bin/bash /volume1/scripts/videostation_for_722.sh --install=all`
 8. Click **OK** to save the settings.
 9. Click on the task - but **don't** enable it - then click **Run**.
 10. Once the script has run you can delete the task, or keep in case you need it again.
 
-**Note:** If you don't want the script to install all 3 packages (Video Station, Media Server and Advanced Media Codecs) you can schedule the script to run with the `install=` option to specify which package(s) to install. See [Options when running the script](https://github.com/007revad/Video_Station_for_DSM_722?tab=readme-ov-file#options-when-running-the-script) for more information.
+**Note:** If you don't want the script to install all 3 packages (Video Station, Media Server and Advanced Media Codecs) you can schedule the script to run with the `--install=` option to specify which package(s) to install. See [Options when running the script](README.md#options-when-running-the-script) for more information.
+
+Use an explicit `--install` choice for scheduled runs. The available values are
+`all`, `novs`, `noms`, and `onlyamc`. Without a choice, the menu times out after
+20 seconds and installs all three packages. Quote the script path if it contains
+spaces. For example:
+
+```sh
+/bin/bash "/volume1/scripts/Video Station/videostation_for_722.sh" --install=onlyamc
+```
+
+To select the destination for new packages, append `--volume=/volume2` and keep
+this repository's `lib` directory beside the main script. Existing packages are
+not moved. See [volume installation](docs/package-volume.md) for requirements.
 
 **Here's some screenshots showing what needs to be set:**
 

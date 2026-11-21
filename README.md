@@ -8,6 +8,20 @@
 
 The Video Station icon above is Copyright © 2004-2026 [Synology Inc.](https://kb.synology.com/en-br/DSM/help/DSM/Home/about?version=7)
 
+### Maintenance status
+
+This repository contains maintenance changes to the
+[upstream installer](https://github.com/007revad/Video_Station_for_DSM_722).
+Release badges and release downloads above refer to upstream. To use this
+repository's changes, download this repository's source archive or clone it.
+The installer still checks upstream releases; accepting an update replaces this
+maintenance script with the upstream version.
+
+The package versions remain unchanged. See [compatibility notes](docs/compatibility.md)
+for volume selection, confirmed Package Center settings storage, and the optional
+OpenSubtitles REST adapter. Installation and playback need verification on a NAS;
+local checks cover the installer, API contracts, and subtitle adapter.
+
 ### Description
 
 Script to install Video Station in DSM 7.2.2, 7.3, 7.3.1, 7.3.2 and 7.4
@@ -22,12 +36,15 @@ Now also installs Media Server 2.0.5-3152 which supports video and audio convers
 
 **HEIC for Synology Photos:** After running this script and enabling HEVC decoding in Advanced Media Extensions Synology Photos will be able to create thumbnails for HEIC photos again (you can then uninstall Video Station and/or Media Server if you don't need them).
 
-**UPDATE:** Version 1.3.12 and later has a menu where you can select to only install Advanced Media Codecs, or skip installing Media Server or Video Station. See 
+**UPDATE:** Version 1.3.12 and later has a menu where you can select to only install Advanced Media Codecs, or skip installing Media Server or Video Station. See
 <a href="#Screenshots">Screenshots</a>
 
-> **Warning** <br>
-> Recent zero-days security exploits were found in [Synology Photos](https://www.synology.com/en-us/security/advisory/Synology_SA_24_19) and [Synology Drive Server](https://www.synology.com/en-global/security/advisory/Synology_SA_24_21) and quickly patched by Synology. <br>
-> Synology has not made Video Station [End-Of-Life](https://www.synology.com/en-us/products/status?tab=software), as it is still available for DSM 7.2 and 7.2.1 which are both still getting security updates, so Synology should patch Video Station if any security exploits are found.
+> **Package compatibility** <br>
+> This script installs older packages and changes DSM's package compatibility
+> limits and advertised package versions. Other applications that require a
+> newer Advanced Media Extensions package may be affected. Review the
+> [compatibility notes](docs/compatibility.md) before running it and retain a
+> current backup of your package data.
 
 <br>
 
@@ -37,6 +54,9 @@ Now also installs Media Server 2.0.5-3152 which supports video and audio convers
 <p align="center"><img src="/images/installed-3.png"></p>
 
 ### Download the script
+
+For this repository's maintenance version, use **Code > Download ZIP**, extract
+it, and copy the extracted folder to your NAS. For the upstream release instead:
 
 1. Download the latest version _Source code (zip)_ from https://github.com/007revad/Video_Station_for_DSM_722/releases
 2. Save the download zip file to a folder on the Synology.
@@ -49,8 +69,11 @@ There are optional flags you can use when running the script:
 Options:
   -h, --help            Show this help message
   -v, --version         Show the script version
+  -t, --trace           Show package operation trace messages
+      --volume=PATH     Install new packages on an internal volume (e.g. /volume2)
+                        Requires jq and the accompanying lib directory
       --install=OPTION  Automatically install OPTION (for use when scheduled)
-                        OPTION can be either: 
+                        OPTION can be either:
                           'all' to install Video Station, Media Server and
                             Advanced Media Codecs
                           'novs' to install all except Video Station
@@ -65,14 +88,14 @@ Options:
 
 ### To run the script via task scheduler
 
-See [How to run from task scheduler](https://github.com/007revad/Video_Station_for_DSM_722/blob/main/how_to_run_from_scheduler.md)
+See [How to run from task scheduler](how_to_run_from_scheduler.md)
 
 ### To run the script via SSH
 
 [How to enable SSH and login to DSM via SSH](https://kb.synology.com/en-global/DSM/tutorial/How_to_login_to_DSM_with_root_permission_via_SSH_Telnet)
 
-```YAML
-sudo -s /volume1/scripts/videostation_for_722.sh
+```sh
+sudo bash /volume1/scripts/videostation_for_722.sh
 ```
 
 **Note:** Replace /volume1/scripts/ with the path to where the script is located.
@@ -85,10 +108,30 @@ Enable HEVC decoding:
 1. Open Package Center > Installed.
 2. Click Advanced Media Extensions.
 3. Click on Open.
-4. You may need to [Sign in to your Synology account](https://github.com/007revad/Video_Station_for_DSM_722/blob/main/syno_account_sign_in.md)
+4. You may need to [Sign in to your Synology account](syno_account_sign_in.md)
 5. Click on Install then OK.
 
 <p align="center"><img src="/images/enable_hevc.png"></p>
+
+### What about OpenSubtitles and installation volumes?
+
+Use `--volume=/volume2` to select an internal volume for newly installed packages.
+Keep the `lib` directory beside the script. Existing packages with the expected
+version remain on their current volume. See [volume installation](docs/package-volume.md).
+
+The optional [OpenSubtitles REST adapter](docs/subtitle-compatibility.md) adds a
+separate subtitle integration while retaining Video Station 3.1.0 and the older
+codec package. It needs your own API key, has an explicit restore command, and
+requires testing through Video Station on a NAS.
+
+Package Center's settings storage has been identified in three official DSM
+versions. Use the [read-only settings inspector](docs/settings-storage.md) to
+inspect known preferences without exposing the rest of the configuration.
+
+### Development checks
+
+See [Contributing](CONTRIBUTING.md) to install the local checks and run tests
+without a NAS.
 
 ### What about DTS, EAC3 and TrueHD Audio?
 
@@ -102,11 +145,11 @@ Then you have a choice of two official Wrappers:
 1) Download  the latest release from https://github.com/AlexPresso/VideoStation-FFMPEG-Patcher and unzip it.
 
     - Then run VideoStation-FFMPEG-Patcher with the `-v 7` option:
-    ```YAML
+    ```sh
     sudo -s /volume1/scripts/VideoStation-FFMPEG-Patcher/patcher.sh -v 7
     ```
 2) Check it out for more details: https://github.com/darknebular/Wrapper_VideoStation
-    ```YAML
+    ```sh
     bash -c "$(curl "https://raw.githubusercontent.com/darknebular/Wrapper_VideoStation/main/installer.sh")"
     ```
 

@@ -1,0 +1,31 @@
+exclude: ^(\.agent/|\.github/workflows/|(.*/)?CODEOWNERS$)
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+        args: [--markdown-linebreak-ext=md]
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-json
+      - id: check-merge-conflict
+      - id: check-added-large-files
+      - id: detect-private-key
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.11.0.1
+    hooks:
+      - id: shellcheck
+        args: [--severity=warning]
+  - repo: local
+    hooks:
+      - id: bash-syntax
+        name: Check Bash syntax
+        entry: bash -c 'for script in "$@"; do bash -n "$script" || exit; done' --
+        language: system
+        types: [shell]
+      - id: installer-tests
+        name: Check installer behavior
+        entry: python3 -m unittest discover -s tests -v
+        language: system
+        pass_filenames: false
+        files: ^(videostation_for_722\.sh|(lib|scripts)/.*\.sh|subtitle_plugins/.*|tests/.*\.py)$
