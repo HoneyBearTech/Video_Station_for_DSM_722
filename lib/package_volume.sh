@@ -1,17 +1,22 @@
 #!/usr/bin/env bash
 # Source this file to install local packages on a selected DSM data volume.
+# Used by videostation_for_722.sh when it is run with --volume=/volumeN.
+
+# Longest time one package web service call may take.
+volume_api_timeout="10m"
 
 volume_require_tools(){
     if ! command -v jq >/dev/null 2>&1 ||
+            ! command -v timeout >/dev/null 2>&1 ||
             [[ ! -x /usr/syno/bin/synowebapi ]] ||
             [[ ! -x /usr/syno/bin/synopkg ]]; then
-        echo "Volume selection requires jq, synowebapi, and synopkg on the NAS." >&2
+        echo "Volume selection requires jq, timeout, synowebapi, and synopkg on the NAS." >&2
         return 1
     fi
 }
 
 volume_webapi(){
-    /usr/syno/bin/synowebapi --exec "$@"
+    timeout "$volume_api_timeout" /usr/syno/bin/synowebapi --exec "$@"
 }
 
 volume_package_status(){
@@ -80,19 +85,16 @@ volume_check_target(){
     fi
 }
 
-volume_install_spk(){
-    # $1: downloaded package path; $2: package ID; $3: requested data volume.
-    local spk="$1" package="$2" volume="$3" reply encoded_id encoded_path encoded_volume
-    local target code attempt
-    if [[ ! $package =~ ^[A-Za-z][A-Za-z0-9_-]*$ ]] ||
-            [[ $spk != /* || ! -f $spk || ! -s $spk ]]; then
-        echo "A package ID and a nonempty local package file are required." >&2
+volume_check_package(){
+    # $1: package ID; $2: requested data volume.
+    # Asks DSM whether the package can be installed on the volume. This does
+    # not change anything. DSM may not answer for a package that is installed.
+    local package="$1" volume="$2" reply encoded_id
+    if [[ ! $package =~ ^[A-Za-z][A-Za-z0-9_-]*$ ]]; then
+        echo "A package ID is required." >&2
         return 1
     fi
-    volume_check_target "$volume" || return 1
     encoded_id=$(volume_encode_string "$package") || return 1
-    encoded_path=$(volume_encode_string "$spk") || return 1
-    encoded_volume=$(volume_encode_string "$volume") || return 1
     reply=$(volume_api_call api=SYNO.Core.Package.Installation method=check version=1 \
         "id=$encoded_id" 'install_type=""' install_on_cold_storage=false \
         breakpkgs=null blCheckDep=false replacepkgs=null) || return 1
@@ -104,6 +106,23 @@ volume_install_spk(){
         echo "The package pre-check did not allow the selected volume." >&2
         return 1
     fi
+}
+
+volume_install_spk(){
+    # $1: downloaded package path; $2: package ID; $3: requested data volume.
+    local spk="$1" package="$2" volume="$3" reply encoded_path encoded_volume
+    local target code attempt
+    if [[ ! $package =~ ^[A-Za-z][A-Za-z0-9_-]*$ ]] ||
+            [[ $spk != /* || ! -f $spk || ! -s $spk ]]; then
+        echo "A package ID and a nonempty local package file are required." >&2
+        return 1
+    fi
+    # Check again just before installing: things may have changed since the
+    # check at the start of the run.
+    volume_check_target "$volume" || return 1
+    volume_check_package "$package" "$volume" || return 1
+    encoded_path=$(volume_encode_string "$spk") || return 1
+    encoded_volume=$(volume_encode_string "$volume") || return 1
     reply=$(volume_api_call api=SYNO.Core.Package.Installation method=install version=1 \
         type=0 "volume_path=$encoded_volume" "path=$encoded_path" \
         check_codesign=true force=false installrunpackage=true 'extra_values="{}"') || return 1
