@@ -260,6 +260,21 @@ else
 fi
 echo "Using CPU type: $cputype"
 
+safe_to_source(){ 
+    # $1 is a file or folder that root will read code from
+    # Owned by the user running the script (root) and not group- or world-writable
+    local mode
+    if [[ -L $1 ]] || [[ ! -O $1 ]]; then
+        return 1
+    fi
+    # Only the mode column is read; ls -ld works the same on every DSM version
+    # shellcheck disable=SC2012
+    mode=$(ls -ld -- "$1" 2>/dev/null | cut -c1-10)
+    if [[ ${#mode} != "10" ]] || [[ ${mode:5:1} != "-" ]] || [[ ${mode:8:1} != "-" ]]; then
+        return 1
+    fi
+}
+
 # Check the volume set with --volume before downloading or changing anything
 if [[ -n $install_volume ]]; then
     if [[ ! -f "$scriptpath/lib/package_volume.sh" ]]; then
@@ -269,6 +284,20 @@ if [[ -n $install_volume ]]; then
         echo "Nothing was changed on the NAS."
         exit 2
     fi
+    # This file runs as root, so only root may be able to change it
+    for libpath in "$scriptpath/lib" "$scriptpath/lib/package_volume.sh"; do
+        if ! safe_to_source "$libpath"; then
+            ding
+            echo -e "${Error}ERROR${Off} --volume won't load $libpath"
+            echo "It must be owned by root, not a link, and not writable by group or others,"
+            echo "because it runs as root and anyone who can change it could run commands as root."
+            echo "To fix it, run:"
+            echo "  sudo chown -R root:root $(printf '%q' "$scriptpath/lib")"
+            echo "  sudo chmod -R go-w $(printf '%q' "$scriptpath/lib")"
+            echo "Nothing was changed on the NAS."
+            exit 2
+        fi
+    done
     # shellcheck source=lib/package_volume.sh
     if ! source "$scriptpath/lib/package_volume.sh"; then
         ding
