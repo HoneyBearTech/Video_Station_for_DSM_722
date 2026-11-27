@@ -4,6 +4,62 @@ Why things are the way they are: each entry gives the decision, the reason and
 what was turned down. Newest first. What shipped is in the [pass
 map](pass-map.md).
 
+## 2026-11-27: PR #3's features rebuilt as two pull requests
+
+Job `pr3-rebase` (#8, #9).
+
+**Decision.**
+- **Rebuilt by hand:** PR #3's install-volume and REST-subtitle features were
+  redone on current `main` instead of rebasing PR #3. A rebase would have
+  brought back its older download and self-updater code.
+- **Split in two:** they are two pull requests, because each needs its own
+  NAS test and one shouldn't hold up the other.
+- **Left out:** the package-settings inspector, the contribution guide,
+  pre-commit and `.gitignore`. The roadmap has the inspector as a separate
+  item, and the bootstrap job covers the rest.
+- **Volume checks:** a clear "no" from DSM's package check stops the run
+  before anything changes, even for a package that is still installed. Only
+  a check that couldn't run lets an installed package go ahead, with a
+  warning.
+- **Helper ownership:** the helper is only loaded when the script folder and
+  `lib/` are owned by root and not writable by others. The folders above the
+  script folder are not checked; the docs say they must be root- or
+  admin-only, because the script file itself depends on that too.
+
+**Why.** These are the roadmap's next step after the safety fixes. The
+volume feature uses a DSM service seen only in stand-ins, so it fails safe.
+
+**Alternatives.**
+- One combined PR: rejected, because both would wait for both NAS tests.
+- Keeping PR #3's extra files: rejected, because that goes beyond "only its
+  new features" and gets ahead of the bootstrap job.
+- Checking every folder above the script: rejected, because it would refuse
+  most shared-folder setups and adds little while the script file has the
+  same exposure.
+
+**Review findings.**
+- **Fixed in the volume PR:**
+  - DSM refusing an installed package was treated as "couldn't check";
+  - the late-failure report claimed things it hadn't confirmed (removed /
+    not removed, wrong volume vs. unknown location);
+  - the helper was loaded as root with no ownership check;
+  - rejected values were printed with `echo -e`.
+- **Fixed in the subtitle PR:**
+  - a failed restore could leave the plugin missing;
+  - the API key file was read twice;
+  - the key file's owner wasn't checked;
+  - the sign-in reply's host wasn't checked strictly enough;
+  - the changelog entry wasn't marked unreleased;
+  - `--restore` with a key file gave a misleading message.
+- **Declined:**
+  - Re-checking every package just before each uninstall: DSM may not
+    answer for an installed package, and a clear refusal already stops the
+    run.
+  - Refusing abbreviated options such as `--vol=`: these are standard and
+    harmless.
+- **Not run:** the independent plan check (service unavailable). The second
+  security review ran on the fallback service and found nothing.
+
 ## 2026-11-27: Safety fixes for the maintained copy
 
 Job `safety-fixes` (#7).

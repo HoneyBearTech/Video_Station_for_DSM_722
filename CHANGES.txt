@@ -1,5 +1,12 @@
-Unreleased - subtitle plugin (optional, separate from the install script)
-- Added an optional OpenSubtitles.com plugin for Video Station 3.1.0, with its own setup and restore script, scripts/install-subtitle-plugin.sh. See docs/subtitle-compatibility.md
+v1.4.22-hbt.2
+- Added `--volume=/volumeN` option to install the packages on a chosen volume (needs the lib folder that comes with the script). See docs/package-volume.md
+  - Checks the volume is mounted read-write and listed by Package Center, and asks DSM if each package can go there, before downloading or changing anything.
+  - If installing on the volume fails after the old package was removed, says which packages were removed and how to run the script again without `--volume`.
+  - Packages that are already the right version stay on their current volume.
+  - The script's folder and the lib folder must be owned by root and not writable by group or others, because lib runs as root.
+- Changed to stop with exit code 2 for a mistyped option or an extra argument.
+- Bug fix for `-t, --trace` option which stopped the script instead of working.
+- Removed the `--log`, `--debug` and `--autoupdate` options which did nothing.
 
 v1.4.22-hbt.1
 - Changed to check the HTTPS certificate when downloading packages, and to only allow HTTPS (also after a redirect).
