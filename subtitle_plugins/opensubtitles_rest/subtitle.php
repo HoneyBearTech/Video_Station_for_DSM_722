@@ -6,6 +6,7 @@ class SubtitleRestClient
     private $token = '';
     private $base = 'https://api.opensubtitles.com/api/v1';
     private $transport;
+    private static $apiHosts = array('api.opensubtitles.com', 'vip-api.opensubtitles.com');
     private static $languages = array(
         'eng'=>'en', 'fre'=>'fr', 'fra'=>'fr', 'ger'=>'de', 'deu'=>'de',
         'spa'=>'es', 'ita'=>'it', 'dut'=>'nl', 'nld'=>'nl', 'por'=>'pt-pt',
@@ -31,7 +32,7 @@ class SubtitleRestClient
     {
         $parts = parse_url($url);
         $host = isset($parts['host']) ? strtolower($parts['host']) : '';
-        $allowed = $api ? in_array($host, array('api.opensubtitles.com', 'vip-api.opensubtitles.com'), true)
+        $allowed = $api ? in_array($host, self::$apiHosts, true)
             : ($host === 'opensubtitles.com' || substr($host, -18) === '.opensubtitles.com');
         if (!$parts || ($parts['scheme'] ?? '') !== 'https' || !$allowed ||
                 isset($parts['user']) || isset($parts['pass']) ||
@@ -142,7 +143,10 @@ class SubtitleRestClient
             throw new RuntimeException('Subtitle login failed');
         }
         $host = $result['base_url'] ?? 'api.opensubtitles.com';
-        self::checkUrl('https://' . $host, true);
+        // Only a bare host name: no scheme, port, user, path, query or fragment.
+        if (!is_string($host) || !in_array(strtolower($host), self::$apiHosts, true)) {
+            throw new RuntimeException('Untrusted service URL');
+        }
         $this->base = 'https://' . $host . '/api/v1';
         $this->token = $result['token'];
     }

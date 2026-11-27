@@ -134,6 +134,15 @@ class SubtitleAdapterTests(unittest.TestCase):
         self.assertEqual(output["error"], "Untrusted service URL")
         self.assertEqual(len(output["calls"]), 2)
 
+    def test_login_host_must_be_a_bare_host_name(self):
+        host = "api.opensubtitles.com"
+        for base_url in (host + "/", host + "/path", host + "?query=1", host + "#fragment",
+                         host + ":443", "user@" + host, "https://" + host, ["list"]):
+            with self.subTest(base_url=base_url):
+                output = self.invoke(self.search_code(), [], {"token": "session-token", "base_url": base_url})
+                self.assertEqual(output["error"], "Untrusted service URL")
+                self.assertEqual(len(output["calls"]), 1)
+
     def test_traversal_and_symlink_destinations_are_rejected(self):
         output = self.invoke("$result=$client->download(" + json.dumps(str(self.video)) + ",'../../outside')", [])
         self.assertEqual(output["error"], "Invalid subtitle selection")
