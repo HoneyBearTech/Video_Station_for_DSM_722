@@ -443,6 +443,57 @@ package_install(){
     progstatus "$?" "$string" "line ${LINENO}"
 }
 
+pkg_sha256(){ 
+    # $1 is the package file name
+    # SHA-256 of each package file as downloaded from Synology (certificate check on)
+    case "$1" in
+        CodecPack-armada37xx-3.1.0-3005.spk)
+            echo "5db7166d7186004e72eb8bc2d650a8dd8a17760afe141c9dc3aedec13bf0119b" ;;
+        CodecPack-armada38x-3.1.0-3005.spk)
+            echo "496a6276aa7bf79fcdca238d6078bf890b25384ff445b357165b8766111b5717" ;;
+        CodecPack-armv7-3.1.0-3005.spk)
+            echo "e38bb5dc81b7ac4551162c42ae2e3f2cf64b767624669bf65ca0dd53dbb9a185" ;;
+        CodecPack-monaco-3.1.0-3005.spk)
+            echo "b6917fadbcc5f8c26a1a6cd694ffe9928fcaba0890df3dad9827a27ad5169e90" ;;
+        CodecPack-rtd1296-3.1.0-3005.spk)
+            echo "6c46f434c02f0a56071844ec67fd91051179f543a18457d6b7e22bee9c13a743" ;;
+        CodecPack-rtd1619b-3.1.0-3005.spk)
+            echo "d50b70dc1d89c607cd545d5ab70b6d047355cf13aa628823ef63079b3b54d44d" ;;
+        CodecPack-x86_64-3.1.0-3005.spk)
+            echo "c4dcb4ab66cdd83cba7dcb909658bb239feab0325bfa794e3925c87e8656b85a" ;;
+        VideoStation-armada37xx-3.1.0-3153.spk)
+            echo "cc5070f3d6794ec6740301e7cc8698cd100d49d008ac634d37aeaf77912ab977" ;;
+        VideoStation-armada38x-3.1.0-3153.spk)
+            echo "e93727ea8495753017dc635ed352b40a1dec14995eda9cf7d7bd045c9357928f" ;;
+        VideoStation-armv7-3.1.0-3153.spk)
+            echo "5b4cfc4bd43b0c4f896a38f850f09d4673ae49e9d72eeea0180865d9a7e28230" ;;
+        VideoStation-monaco-3.1.0-3153.spk)
+            echo "8c1dd917b28c9184ef5bcecf6087e24d48ea65fd0ad457f37f9e03ae95236963" ;;
+        VideoStation-rtd1296-3.1.0-3153.spk)
+            echo "4f94403b959c1697ea1b21b5decff4777201ada72370dd31c45ecbadcdf00d4d" ;;
+        VideoStation-rtd1619b-3.1.0-3153.spk)
+            echo "d38267b4cdae6f2e69ba45a76aa9554cfbd5b503264783c68284f060f80325fd" ;;
+        VideoStation-x86_64-3.1.0-3153.spk)
+            echo "e9b1a4935e255aac649953fa6b8a10ebcb3114970552dcf00b9ff93d62065715" ;;
+        MediaServer-armada37xx-2.0.5-3152.spk)
+            echo "17e11f8146a62712861cb1c8df9a223a5eee02fe7ea08cd86899ba2d3f4366a8" ;;
+        MediaServer-armada38x-2.0.5-3152.spk)
+            echo "3d90c6157b7e01bb2c46901f35224a8d7530bf28b69db2e48c0daf070b6cda53" ;;
+        MediaServer-armv7-2.0.5-3152.spk)
+            echo "87da07b1d33b56c2186b682a1dbb313d4f4889fae39947c34276fce951ba379b" ;;
+        MediaServer-monaco-2.0.5-3152.spk)
+            echo "5e8aa508b5ae772bc30356e8e39b86e4b215b4b67fa2898b4b7d63f37b9259b1" ;;
+        MediaServer-rtd1296-2.0.5-3152.spk)
+            echo "fa82ac4d020ffd7b79d793191bdda102b3866434c6879ce47a69d29c17f4364a" ;;
+        MediaServer-rtd1619b-2.0.5-3152.spk)
+            echo "62c467ddc566f8c5afee6ba2be05ff029cc9a09c1926c51aa9a6eab355e51564" ;;
+        MediaServer-x86_64-2.0.5-3152.spk)
+            echo "38e77b230f339e78721e7bdb7543ed56c48ff84564665220dcd62baa5fb32e8e" ;;
+        *)
+            return 1 ;;
+    esac
+}
+
 download_pkg(){ 
     # $1 is the package folder name
     # $2 is the package version to download
@@ -452,6 +503,23 @@ download_pkg(){
     # https://global.synologydownload.com/download/Package/spk/VideoStation/3.1.0-3153/VideoStation-x86_64-3.1.0-3153.spk
 
     local url
+    local host
+    local file
+    local expected
+    local actual
+    local curlcode
+
+    # Can't check the download without sha256sum
+    if ! command -v sha256sum >/dev/null 2>&1; then
+        ding
+        echo -e "${Error}ERROR 3${Off} sha256sum not found so ${3:?} can't be checked!"
+        echo "Nothing was changed on the NAS."
+        exit 3
+    fi
+
+    file="${workdir:?}/${3:?}"
+    expected=$(pkg_sha256 "$3")
+
     language=$(synogetkeyvalue /etc/synoinfo.conf language)
     if [[ $language =~ chs|cht ]] && readlink -q /etc/localtime | grep -iq china;
     then
@@ -465,25 +533,47 @@ download_pkg(){
         bases+=("https://cndl.synology.cn/download/Package/spk/")
     fi
     # Never reuse a file that is already there
-    rm -f -- "${workdir:?}/${3:?}"
+    rm -f -- "$file"
     for base in "${bases[@]}"; do
-        url="${base}${1:?}/${2:?}/${3:?}"
+        url="${base}${1:?}/${2:?}/${3}"
+        host=$(echo "$base" | cut -d"/" -f3)
         echo -en "\nDownloading ${Cyan}${3}${Off} from "
-        echo "$base" | cut -d"/" -f3
-        #if curl -kfL --connect-timeout 30 --retry 5 --retry-all-errors "$url" -o "$workdir/$3"; then
-        if curl -kfL --connect-timeout 30 --retry 1 "$url" -o "$workdir/$3"; then
-            if [[ -f "$workdir/$3" ]]; then
-                break
+        echo "$host"
+        curl -fL --proto '=https' --proto-redir '=https' --connect-timeout 30 --retry 1 "$url" -o "$file"
+        curlcode=$?
+        if [[ $curlcode != "0" ]]; then
+            # Delete partial download
+            rm -f -- "$file"
+            if [[ $curlcode == "60" ]] || [[ $curlcode == "77" ]]; then
+                echo -e "${Error}ERROR${Off} Certificate check failed for $host!"
+                echo "Check the NAS date and time are correct, and update DSM."
+                echo "Nothing was changed on the NAS."
+            else
+                echo -e "${Error}ERROR${Off} Failed to download ${3} from $host (curl exit code $curlcode)!"
             fi
+            continue
         fi
+        if [[ -z $expected ]]; then
+            rm -f -- "$file"
+            echo -e "${Error}ERROR${Off} No SHA-256 checksum is recorded for ${3}!"
+            continue
+        fi
+        actual=$(sha256sum "$file" 2>/dev/null | cut -d" " -f1)
+        if [[ $actual != "$expected" ]]; then
+            rm -f -- "$file"
+            echo -e "${Error}ERROR${Off} SHA-256 checksum check failed for ${3} from $host!"
+            echo "  Expected: $expected"
+            echo "  Actual:   $actual"
+            continue
+        fi
+        echo "SHA-256 checksum OK"
+        return 0
     done
-    if [[ ! -f "$workdir/${3:?}" ]]; then
-        ding
-        echo -e "${Error}ERROR 3${Off} Failed to download ${3}!"
-        exit 3
-    else
-        echo ""
-    fi
+    rm -f -- "$file"
+    ding
+    echo -e "${Error}ERROR 3${Off} Failed to download ${3}!"
+    echo "Nothing was changed on the NAS."
+    exit 3
 }
 
 
