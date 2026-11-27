@@ -1,6 +1,7 @@
 """Run the complete installer against stand-in DSM commands."""
 
 import json
+import os
 import re
 import unittest
 
@@ -227,7 +228,9 @@ class VolumeInstallTests(unittest.TestCase):
             "not mounted": {"mounts": ["/volume1"]},
             "read-only": {"mounts": [("/volume2", "ro")]},
             "not listed by Package Center": {"webapi": {"volumes": ["/volume1"]}},
-            "DSM refuses the package": {"webapi": {"refuse_check": ["VideoStation"]}},
+            "DSM can't check a package that isn't installed": {"webapi": {"refuse_check": ["VideoStation"]}},
+            "DSM says the volume is occupied": {"webapi": {"deny_check": {"VideoStation": "occupied"}}},
+            "DSM doesn't offer the volume for the package": {"webapi": {"deny_check": {"MediaServer": "unlisted"}}},
         }
         for name, options in cases.items():
             with self.subTest(case=name):
@@ -247,6 +250,42 @@ class VolumeInstallTests(unittest.TestCase):
                 self.assertIn(message, run.output)
 
     @needs_jq
+    def test_installed_package_dsm_refuses_stops_before_any_change(self):
+        installed = {"CodecPack": {"version": "4.0.0-4025", "running": True}}
+        for deny in ("occupied", "unlisted"):
+            with self.subTest(deny=deny):
+                run = run_installer("onlyamc", installed, extra_args=("--volume=/volume2",),
+                                    webapi={"deny_check": {"CodecPack": deny}})
+                self.assert_nothing_changed(run, installed)
+                self.assertIn("DSM refused to install Advanced Media Extensions on /volume2", run.output)
+                self.assertNotIn("could not check", run.output)
+
+    def test_unsafe_lib_folder_is_refused(self):
+        def chmod(path, mode):
+            return lambda folder: (folder / path).chmod(mode)
+        def chown(folder):
+            os.chown(folder / "package_volume.sh", 1000, 1000)
+        def link(folder):
+            real = folder.parent / "elsewhere.sh"
+            (folder / "package_volume.sh").rename(real)
+            (folder / "package_volume.sh").symlink_to(real)
+        cases = {
+            "group-writable file": chmod("package_volume.sh", 0o664),
+            "world-writable file": chmod("package_volume.sh", 0o646),
+            "group-writable folder": chmod(".", 0o775),
+            "world-writable folder": chmod(".", 0o757),
+            "file owned by another user": chown,
+            "file is a link": link,
+        }
+        for name, setup in cases.items():
+            with self.subTest(case=name):
+                run = run_installer("all", OLD_VERSIONS, extra_args=("--volume=/volume2",), lib_setup=setup)
+                self.assert_nothing_changed(run, OLD_VERSIONS)
+                self.assertIn("won't load", run.output)
+                self.assertIn("could run commands as root", run.output)
+                self.assertEqual([row for row in run.operations if row[0] == "synowebapi"], [])
+
+    @needs_jq
     def test_installed_package_dsm_cannot_check_is_noted_not_failed(self):
         run = run_installer("onlyamc", {"CodecPack": {"version": "4.0.0-4025", "running": True}},
                             extra_args=("--volume=/volume2",))
@@ -262,10 +301,12 @@ class VolumeInstallTests(unittest.TestCase):
         self.assertNotEqual(run.returncode, 0, run.output)
         self.assertEqual(run.returncode, 1, run.output)
         self.assertIn("Video Station could not be installed on /volume2", run.output)
-        self.assertIn("This run removed these packages and they are not installed now:", run.output)
-        self.assertIn("  - Video Station 30.1.1-3168", run.output)
-        self.assertIn("  - Media Server 20.1.0-3304", run.output)
-        self.assertNotIn("  - Advanced Media Extensions", run.output)
+        self.assertIn("  - Advanced Media Extensions: installed (30.1.0-3005) on /volume2", run.output)
+        self.assertIn("  - Video Station: not installed (was 30.1.1-3168 when this run started)", run.output)
+        self.assertIn("  - Media Server: not installed (was 20.1.0-3304 when this run started)", run.output)
+        removed = run.output.split("This run removed:\n", 1)[1].split("To install", 1)[0]
+        self.assertEqual(removed.splitlines(), ["  - Video Station 30.1.1-3168", "  - Media Server 20.1.0-3304"])
+        self.assertNotIn("did not remove", run.output)
         self.assertIn("run the script again without --volume", run.output)
         rerun = run.output.split("without --volume:\n", 1)[1].splitlines()[0]
         self.assertRegex(rerun, r"^  sudo bash /\S+/installer\.sh --install=all$")
@@ -278,7 +319,23 @@ class VolumeInstallTests(unittest.TestCase):
                             webapi={"fail_install": ["CodecPack"]})
         self.assertEqual(run.returncode, 1, run.output)
         self.assertIn("This run did not remove any package.", run.output)
-        self.assertIn("Advanced Media Extensions is not installed.", run.output)
+        self.assertIn("  - Advanced Media Extensions: not installed\n", run.output)
+        self.assertIn("run the script again without --volume", run.output)
+
+    @needs_jq
+    def test_install_that_lands_on_another_volume_says_where(self):
+        run = run_installer("onlyamc", extra_args=("--volume=/volume2",),
+                            webapi={"install_elsewhere": {"CodecPack": "/volume1"}})
+        self.assertEqual(run.returncode, 1, run.output)
+        self.assertIn("not confirmed on the selected volume", run.output)
+        self.assertIn("  - Advanced Media Extensions: installed (3.1.0-3005) but not on /volume2 "
+                      "(it is in /volume1/@appstore/CodecPack)", run.output)
+        self.assertIn("This run did not remove any package.", run.output)
+        self.assertNotIn("not installed", run.output)
+        self.assertIn("run the script again without --volume", run.output)
+        # The run stopped before changing the new package's version or restarting it.
+        self.assertFalse(any(row[0] == "synosetkeyvalue" and row[1].endswith("/INFO")
+                             for row in run.operations))
 
     @needs_jq
     def test_packages_already_right_stay_where_they_are(self):

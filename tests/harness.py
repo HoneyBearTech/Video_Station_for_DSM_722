@@ -146,9 +146,12 @@ elif name == "curl":
         output.write_text("genuine " + filename + "\n")
 elif name == "synowebapi":
     # MOCK_WEBAPI: {"volumes": [...] listed by Package Center,
-    #   "refuse_check": [<pkg>, ...] the pre-check says no,
+    #   "refuse_check": [<pkg>, ...] the pre-check call fails (DSM can't answer),
+    #   "deny_check": {<pkg>: "occupied" | "unlisted"} the pre-check answers no,
     #   "check_installed": true to answer the pre-check for installed packages,
-    #   "fail_install": [<pkg>, ...] the install call fails}
+    #   "fail_install": [<pkg>, ...] the install call fails,
+    #   "install_elsewhere": {<pkg>: "/volumeN"} the install reports success but
+    #     the package lands on that volume instead}
     web = json.loads(os.environ.get("MOCK_WEBAPI", "{}"))
     fields = dict(arg.split("=", 1) for arg in args if "=" in arg)
     api, method = fields.get("api"), fields.get("method")
@@ -165,7 +168,12 @@ elif name == "synowebapi":
         reply({"volume_list": volumes})
     elif api == "SYNO.Core.Package.Installation" and method == "check":
         package = json.loads(fields["id"])
-        if package in web.get("refuse_check", []) or (package in state and not web.get("check_installed")):
+        deny = web.get("deny_check", {}).get(package)
+        if deny == "occupied":
+            reply({"is_occupied": True, "volume_list": volumes})
+        elif deny == "unlisted":
+            reply({"is_occupied": False, "volume_list": [{"mount_point": "/volume9"}]})
+        elif package in web.get("refuse_check", []) or (package in state and not web.get("check_installed")):
             reply()
         else:
             reply({"is_occupied": False, "volume_list": volumes})
@@ -188,7 +196,8 @@ elif name == "synowebapi":
             target.parent.mkdir(parents=True, exist_ok=True)
             if target.is_symlink():
                 target.unlink()
-            target.symlink_to(volume + "/@appstore/" + package)
+            landed = web.get("install_elsewhere", {}).get(package, volume)
+            target.symlink_to(landed + "/@appstore/" + package)
             reply({"packageName": package})
     else:
         raise SystemExit("Unexpected web API call")
@@ -268,11 +277,12 @@ DEFAULT_MOUNTS = ("/volume1", "/volume2")
 
 def run_installer(choice="all", installed=None, arch="x86_64", curl=None, plant=None,
                   drop_hashes=(), source_edits=(), uninstall=None, extra_args=(), args=None,
-                  lib=True, lib_edits=(), mounts=None, webapi=None):
+                  lib=True, lib_edits=(), lib_setup=None, mounts=None, webapi=None):
     """Run the whole installer with --install=<choice> and return a Run.
 
     extra_args are added after --install; args replaces all the arguments.
-    lib=False leaves out the lib folder. mounts lists the volumes in the
+    lib=False leaves out the lib folder; lib_setup(lib_folder) can change it
+    (owner, mode) after it is written. mounts lists the volumes in the
     stand-in /proc/mounts, as "/volumeN" (read-write) or ("/volumeN", "ro").
     webapi sets how the stand-in synowebapi answers (see MOCK_WEBAPI).
     """
@@ -352,6 +362,8 @@ def run_installer(choice="all", installed=None, arch="x86_64", curl=None, plant=
             library = pattern.sub(lambda match: lib_replacements[match[0]], library)
             (folder / "lib").mkdir()
             (folder / "lib/package_volume.sh").write_text(library)
+            if lib_setup:
+                lib_setup(folder / "lib")
 
         arguments = list(args) if args is not None else [f"--install={choice}", *extra_args]
         result = subprocess.run(
