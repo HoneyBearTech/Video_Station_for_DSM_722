@@ -500,6 +500,17 @@ package_uninstall(){
     progbar "$pid" "$string"
     wait "$pid"
     progstatus "$?" "$string" "line ${LINENO}"
+
+    # Record what this run removed, for the --volume failure report.
+    # Removing one package can take others with it (e.g. AME v4).
+    if [[ -n $install_volume ]]; then
+        removed_by_run[$1]="yes"
+        for pkg in CodecPack VideoStation MediaServer; do
+            if [[ -n ${versions_before[$pkg]} ]] && ! check_pkg_installed "$pkg"; then
+                removed_by_run[$pkg]="yes"
+            fi
+        done
+    fi
 }
 
 package_install(){ 
@@ -547,13 +558,11 @@ volume_install_failed(){
     local code
     local version
     local target
-    local missing
+    local removed
     local uncertain
-    local changed
     local rerun
-    missing=()
+    removed="no"
     uncertain="no"
-    changed="no"
     echo ""
     echo -e "${Error}ERROR${Off} $1 could not be installed on $install_volume"
     echo "What DSM reports now:"
@@ -566,18 +575,9 @@ volume_install_failed(){
         /usr/syno/bin/synopkg status "$pkg" >/dev/null 2>&1
         code="$?"
         if [[ $code == "255" ]] || [[ $code == "4" ]]; then
-            if [[ -n ${versions_before[$pkg]} ]]; then
-                echo "  - $(pkg_name "$pkg"): not installed (was ${versions_before[$pkg]} when this run started)"
-                missing+=("$pkg")
-            else
-                echo "  - $(pkg_name "$pkg"): not installed"
-            fi
+            echo "  - $(pkg_name "$pkg"): not installed"
         elif [[ $code == "0" ]] || [[ $code == "17" ]] || [[ $code == "3" ]] || [[ $code == "55" ]]; then
             version=$(/usr/syno/bin/synopkg version "$pkg" 2>/dev/null)
-            if [[ -n ${versions_before[$pkg]} ]] && [[ $version != "${versions_before[$pkg]}" ]]; then
-                # Removed and installed again
-                changed="yes"
-            fi
             target=$(volume_package_target "$pkg" 2>/dev/null)
             if [[ $target == "$install_volume/@appstore/$pkg" ]]; then
                 echo "  - $(pkg_name "$pkg"): installed ($version) on $install_volume"
@@ -591,17 +591,21 @@ volume_install_failed(){
             uncertain="yes"
         fi
     done
-    if [[ ${#missing[@]} -gt "0" ]]; then
-        echo "This run removed:"
-        for pkg in "${missing[@]}"; do
+    # Only packages this run saw being removed
+    for pkg in CodecPack VideoStation MediaServer; do
+        if [[ ${removed_by_run[$pkg]} == "yes" ]]; then
+            if [[ $removed == "no" ]]; then
+                echo "This run removed (what is installed now is listed above):"
+                removed="yes"
+            fi
             echo "  - $(pkg_name "$pkg") ${versions_before[$pkg]}"
-        done
-    elif [[ $uncertain == "yes" ]]; then
-        echo "Check Package Center to see what this run changed."
-    elif [[ $changed == "no" ]]; then
+        fi
+    done
+    if [[ $removed == "no" ]]; then
         echo "This run did not remove any package."
-    else
-        echo "No package that was installed before this run is missing now."
+    fi
+    if [[ $uncertain == "yes" ]]; then
+        echo "Check Package Center for the packages marked uncertain."
     fi
     rerun="sudo bash $(printf '%q' "${scriptpath}/$scriptfile")"
     if [[ -n $install_choice ]]; then
@@ -825,6 +829,7 @@ fi
 
 # Ask DSM if each package can go on the --volume volume, before any change
 declare -A versions_before=()
+declare -A removed_by_run=()
 if [[ -n $install_volume ]]; then
     for pkg in CodecPack VideoStation MediaServer; do
         if check_pkg_installed "$pkg"; then
