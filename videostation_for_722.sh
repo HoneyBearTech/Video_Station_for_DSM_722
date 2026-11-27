@@ -28,10 +28,9 @@
 #   or add OpenSubtitle changes from 3.1.1-3168 to 3.1.0-3153
 #------------------------------------------------------------------------------
 
-scriptver="v1.4.22"
+scriptver="v1.4.22-hbt.1"
 script=Video_Station_for_DSM_722
-repo="007revad/Video_Station_for_DSM_722"
-scriptname=videostation_for_722
+repo="HoneyBearTech/Video_Station_for_DSM_722"
 
 ding(){ 
     printf \\a
@@ -211,20 +210,6 @@ fi
 
 
 #------------------------------------------------------------------------------
-# Check latest release with GitHub API
-
-# Save options used
-args=("$@")
-
-# Get latest release info
-# Curl timeout options:
-# https://unix.stackexchange.com/questions/94604/does-curl-have-a-timeout
-release=$(curl --silent --connect-timeout 30 \
-    "https://api.github.com/repos/$repo/releases/latest")
-
-# Release version
-tag=$(echo "$release" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
-shorttag="${tag:1}"
 
 # Get script location
 # https://stackoverflow.com/questions/59895/
@@ -239,125 +224,6 @@ done
 scriptpath=$( cd -P "$( dirname "$source" )" >/dev/null 2>&1 && pwd )
 scriptfile=$( basename -- "$source" )
 echo "Running from: ${scriptpath}/$scriptfile"
-
-#echo "Script location: $scriptpath"  # debug
-#echo "Source: $source"               # debug
-#echo "Script filename: $scriptfile"  # debug
-
-#echo "tag: $tag"              # debug
-#echo "scriptver: $scriptver"  # debug
-
-
-cleanup_tmp(){ 
-    # Delete downloaded .tar.gz file
-    if [[ -f "/tmp/$script-$shorttag.tar.gz" ]]; then
-        if ! rm "/tmp/$script-$shorttag.tar.gz"; then
-            echo -e "${Error}ERROR${Off} Failed to delete"\
-                "downloaded /tmp/$script-$shorttag.tar.gz!" >&2
-        fi
-    fi
-
-    # Delete extracted tmp files
-    if [[ -d "/tmp/$script-$shorttag" ]]; then
-        if ! rm -r "/tmp/$script-$shorttag"; then
-            echo -e "${Error}ERROR${Off} Failed to delete"\
-                "downloaded /tmp/$script-$shorttag!" >&2
-        fi
-    fi
-}
-
-
-if ! printf "%s\n%s\n" "$tag" "$scriptver" |
-        sort --check=quiet --version-sort >/dev/null ; then
-    echo -e "\n${Cyan}There is a newer version of this script available.${Off}"
-    echo -e "Current version: ${scriptver}\nLatest version:  $tag"
-    scriptdl="$scriptpath/$script-$shorttag"
-    if [[ -f ${scriptdl}.tar.gz ]] || [[ -f ${scriptdl}.zip ]]; then
-        # They have the latest version tar.gz downloaded but are using older version
-        echo "You have the latest version downloaded but are using an older version"
-        sleep 10
-    elif [[ -d $scriptdl ]]; then
-        # They have the latest version extracted but are using older version
-        echo "You have the latest version extracted but are using an older version"
-        sleep 10
-    else
-        echo -e "${Cyan}Do you want to download $tag now?${Off} [y/n]"
-        read -r -t 30 reply
-        if [[ ${reply,,} == "y" ]]; then
-            # Delete previously downloaded .tar.gz file and extracted tmp files
-            cleanup_tmp
-
-            if cd /tmp; then
-                url="https://github.com/$repo/archive/refs/tags/$tag.tar.gz"
-                if ! curl -JLO -m 30 --connect-timeout 5 "$url"; then
-                    echo -e "${Error}ERROR${Off} Failed to download"\
-                        "$script-$shorttag.tar.gz!"
-                else
-                    if [[ -f /tmp/$script-$shorttag.tar.gz ]]; then
-                        # Extract tar file to /tmp/<script-name>
-                        if ! tar -xf "/tmp/$script-$shorttag.tar.gz" -C "/tmp"; then
-                            echo -e "${Error}ERROR${Off} Failed to"\
-                                "extract $script-$shorttag.tar.gz!"
-                        else
-                            # Set script sh files as executable
-                            if ! chmod a+x "/tmp/$script-$shorttag/"*.sh ; then
-                                permerr=1
-                                echo -e "${Error}ERROR${Off} Failed to set executable permissions"
-                            fi
-
-                            # Copy new script sh file to script location
-                            if ! cp -p "/tmp/$script-$shorttag/${scriptname}.sh" "${scriptpath}/${scriptfile}";
-                            then
-                                copyerr=1
-                                echo -e "${Error}ERROR${Off} Failed to copy"\
-                                    "$script-$shorttag sh file(s) to:\n $scriptpath/${scriptfile}"
-                            fi
-
-                            # Copy new CHANGES.txt file to script location (if script on a volume)
-                            if [[ $scriptpath =~ /volume* ]]; then
-                                # Set permissions on CHANGES.txt
-                                if ! chmod 664 "/tmp/$script-$shorttag/CHANGES.txt"; then
-                                    permerr=1
-                                    echo -e "${Error}ERROR${Off} Failed to set permissions on:"
-                                    echo "$scriptpath/CHANGES.txt"
-                                fi
-
-                                # Copy new CHANGES.txt file to script location
-                                if ! cp -p "/tmp/$script-$shorttag/CHANGES.txt"\
-                                    "${scriptpath}/${scriptname}_CHANGES.txt";
-                                then
-                                    echo -e "${Error}ERROR${Off} Failed to copy"\
-                                        "$script-$shorttag/CHANGES.txt to:\n $scriptpath"
-                                else
-                                    changestxt=" and changes.txt"
-                                fi
-                            fi
-
-                            # Delete downloaded tmp files
-                            cleanup_tmp
-
-                            # Notify of success (if there were no errors)
-                            if [[ $copyerr != 1 ]] && [[ $permerr != 1 ]]; then
-                                echo -e "\n$tag ${scriptfile}$changestxt downloaded to: ${scriptpath}\n"
-
-                                # Reload script
-                                printf -- '-%.0s' {1..79}; echo  # print 79 -
-                                exec "${scriptpath}/$scriptfile" "${args[@]}"
-                            fi
-                        fi
-                    else
-                        echo -e "${Error}ERROR${Off}"\
-                            "/tmp/$script-$shorttag.tar.gz not found!"
-                        #ls /tmp | grep "$script"  # debug
-                    fi
-                fi
-                cd "$scriptpath" || echo -e "${Error}ERROR${Off} Failed to cd to script location!"
-            else
-                echo -e "${Error}ERROR${Off} Failed to cd to /tmp!"
-            fi
-        fi
-    fi
-fi
 
 #------------------------------------------------------------------------------
 
