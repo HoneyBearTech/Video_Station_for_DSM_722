@@ -284,16 +284,22 @@ if [[ -n $install_volume ]]; then
         echo "Nothing was changed on the NAS."
         exit 2
     fi
-    # This file runs as root, so only root may be able to change it
-    for libpath in "$scriptpath/lib" "$scriptpath/lib/package_volume.sh"; do
+    # lib/ runs as root, so only root may be able to change it, or the
+    # folder it is in (anyone who can write there could replace lib/)
+    for libpath in "$scriptpath" "$scriptpath/lib" "$scriptpath/lib/package_volume.sh"; do
         if ! safe_to_source "$libpath"; then
             ding
-            echo -e "${Error}ERROR${Off} --volume won't load $libpath"
+            echo -e "${Error}ERROR${Off} --volume won't load lib/ because of $libpath"
             echo "It must be owned by root, not a link, and not writable by group or others,"
-            echo "because it runs as root and anyone who can change it could run commands as root."
+            echo "because lib/ runs as root and anyone who can change it could run commands as root."
             echo "To fix it, run:"
-            echo "  sudo chown -R root:root $(printf '%q' "$scriptpath/lib")"
-            echo "  sudo chmod -R go-w $(printf '%q' "$scriptpath/lib")"
+            if [[ $libpath == "$scriptpath" ]]; then
+                echo "  sudo chown root:root $(printf '%q' "$scriptpath")"
+                echo "  sudo chmod go-w $(printf '%q' "$scriptpath")"
+            else
+                echo "  sudo chown -R root:root $(printf '%q' "$scriptpath/lib")"
+                echo "  sudo chmod -R go-w $(printf '%q' "$scriptpath/lib")"
+            fi
             echo "Nothing was changed on the NAS."
             exit 2
         fi
