@@ -92,6 +92,12 @@ Enable HEVC decoding:
 
 <p align="center"><img src="/images/enable_hevc.png"></p>
 
+### REST subtitles (optional)
+
+An optional replacement for Video Station's OpenSubtitles plugin that uses the current OpenSubtitles.com service. It needs your own OpenSubtitles.com account and API key, and has its own setup and restore script, `scripts/install-subtitle-plugin.sh`. Searching sends the video's file name and file hash to OpenSubtitles. It has not been verified on a NAS yet.
+
+See [REST subtitles](docs/subtitle-compatibility.md) before installing it.
+
 ### What about DTS, EAC3 and TrueHD Audio?
 
 You can install FFmpeg 7 from SynoCommunity. See [Easy Install](https://synocommunity.com/#easy-install) to add SynologyCommunity package repository to Package Center.

@@ -1,3 +1,6 @@
+Subtitle plugin (optional, separate from the install script)
+- Added an optional OpenSubtitles.com plugin for Video Station 3.1.0, with its own setup and restore script, scripts/install-subtitle-plugin.sh. See docs/subtitle-compatibility.md
+
 v1.4.22-hbt.1
 - Changed to check the HTTPS certificate when downloading packages, and to only allow HTTPS (also after a redirect).
 - Added a SHA-256 check for every package file. A file with no checksum or the wrong checksum is deleted and the next download server is tried.
