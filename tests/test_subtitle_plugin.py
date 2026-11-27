@@ -238,6 +238,7 @@ class SubtitleInstallerTests(unittest.TestCase):
         self.assertEqual(list(self.original.parent.iterdir()), [self.original])
         self.assertTrue((self.backup / "original-marker").exists())
         self.assertEqual((self.original / "api-key").stat().st_mode & 0o777, 0o640)
+        self.assertEqual((self.original / "api-key").read_text(), "application-key\n")
         self.run_setup(self.install, 1)
         self.run_setup(self.restore)
         self.assertEqual((self.original / "original-marker").read_text(), "original")

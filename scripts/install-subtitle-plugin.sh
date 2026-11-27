@@ -145,7 +145,6 @@ if [[ -z $key_text || $key_text == *$'\n'* || $key_text == *$'\r'* || $key_text 
     echo "API key file must contain one nonempty key without whitespace." >&2
     exit 2
 fi
-unset key_text
 if [[ -z $reader_group ]]; then
     reader_group=$(id -gn VideoStation) || {
         echo "Cannot find the subtitle runtime account; supply --reader-group explicitly." >&2
@@ -162,7 +161,9 @@ staging=$(mktemp -d "$state_dir/.subtitle-rest.XXXXXX")
 chmod 0755 "$staging"
 cp "$source_dir/INFO" "$source_dir/subtitle.php" "$staging/"
 chmod 0644 "$staging/INFO" "$staging/subtitle.php"
-cp -- "$key_file" "$staging/api-key"
+# Write the key that was checked above; do not read the source file again.
+printf '%s\n' "$key_text" > "$staging/api-key"
+unset key_text
 chown "root:$reader_group" "$staging/api-key"
 chmod 0640 "$staging/api-key"
 : > "$staging/.rest-adapter"
