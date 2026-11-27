@@ -171,67 +171,117 @@ class SubtitleAdapterTests(unittest.TestCase):
 class SubtitleInstallerTests(unittest.TestCase):
     def setUp(self):
         require_container()
+        temporary = tempfile.TemporaryDirectory(prefix="subtitle-install-")
+        self.addCleanup(temporary.cleanup)
+        folder = Path(temporary.name)
+        scripts = folder / "scripts"
+        scripts.mkdir()
+        (folder / "subtitle_plugins").symlink_to(ROOT / "subtitle_plugins", target_is_directory=True)
+        bindir = folder / "bin"
+        bindir.mkdir()
+        # The fixture copy mocks the root requirement, ownership and package status only.
+        source = (ROOT / "scripts/install-subtitle-plugin.sh").read_text()
+        source = source.replace('if [[ $EUID != 0 ]]; then', 'if false; then')
+        installer = scripts / "install.sh"
+        installer.write_text(source.replace("/usr/syno/bin/synopkg", str(bindir / "synopkg")))
+        mocks = {
+            "chown": "exit 0\n",
+            "synopkg": 'exit "${SUBTITLE_TEST_STATUS:-17}"\n',
+            # Can be told to fail publishing the adapter, or putting the backup back.
+            "mv": 'if [ "${SUBTITLE_FAIL_PUBLISH:-0}" = 1 ]; then\n'
+                  '  case "$1" in */.subtitle-rest.*) exit 1;; esac\nfi\n'
+                  'if [ "${SUBTITLE_FAIL_RESTORE:-0}" = 1 ]; then\n'
+                  '  case "$1" in */syno_opensubtitles.original) exit 1;; esac\nfi\n'
+                  'exec /bin/mv "$@"\n',
+        }
+        for name, body in mocks.items():
+            (bindir / name).write_text("#!/bin/sh\n" + body)
+            (bindir / name).chmod(0o755)
+        package = folder / "package"
+        self.original = package / "target/subtitle_plugins/syno_opensubtitles"
+        self.original.mkdir(parents=True)
+        (self.original / "original-marker").write_text("original")
+        (package / "INFO").write_text('version="30.1.0-3153"\n')
+        key = folder / "key"
+        key.write_text("application-key\n")
+        self.state = package / "target/.subtitle-plugin-backups"
+        self.backup = self.state / "syno_opensubtitles.original"
+        self.env = {**os.environ, "PATH": str(bindir) + os.pathsep + os.environ["PATH"]}
+        base = ["bash", str(installer), f"--package-root={package}"]
+        self.install = base + [f"--api-key-file={key}", "--reader-group=" + grp.getgrgid(os.getgid()).gr_name]
+        self.restore = base + ["--restore"]
+
+    def run_setup(self, command, status=0, **extra):
+        result = subprocess.run(command, env={**self.env, **extra}, capture_output=True, text=True)
+        self.assertEqual(result.returncode, status, result.stdout + result.stderr)
+        return result
+
+    def replace_plugin_as_an_update_does(self):
+        shutil.rmtree(self.original)
+        self.original.mkdir()
+        (self.original / "updated-marker").write_text("updated")
+
+    def set_aside(self, kind):
+        return list(self.state.glob(f"syno_opensubtitles.{kind}.*"))
 
     def test_fixture_install_restore_and_reinstall_protection(self):
-        with tempfile.TemporaryDirectory(prefix="subtitle-install-") as directory:
-            folder = Path(directory)
-            scripts = folder / "scripts"
-            scripts.mkdir()
-            (folder / "subtitle_plugins").symlink_to(ROOT / "subtitle_plugins", target_is_directory=True)
-            # The fixture copy mocks the root requirement and ownership operation only.
-            source = (ROOT / "scripts/install-subtitle-plugin.sh").read_text()
-            source = source.replace('if [[ $EUID != 0 ]]; then', 'if false; then')
-            installer = scripts / "install.sh"
-            installer.write_text(source)
-            bindir = folder / "bin"
-            bindir.mkdir()
-            (bindir / "chown").write_text("#!/bin/sh\nexit 0\n")
-            (bindir / "chown").chmod(0o755)
-            (bindir / "synopkg").write_text('#!/bin/sh\nexit "${SUBTITLE_TEST_STATUS:-17}"\n')
-            (bindir / "synopkg").chmod(0o755)
-            (bindir / "mv").write_text(
-                '#!/bin/sh\nif [ "${SUBTITLE_FAIL_PUBLISH:-0}" = 1 ]; then\n'
-                '  case "$1" in */.subtitle-rest.*) exit 1;; esac\nfi\nexec /bin/mv "$@"\n'
-            )
-            (bindir / "mv").chmod(0o755)
-            installer.write_text(source.replace("/usr/syno/bin/synopkg", str(bindir / "synopkg")))
-            package = folder / "package"
-            original = package / "target/subtitle_plugins/syno_opensubtitles"
-            original.mkdir(parents=True)
-            (original / "original-marker").write_text("original")
-            (package / "INFO").write_text('version="30.1.0-3153"\n')
-            key = folder / "key"
-            key.write_text("application-key\n")
-            env = {**os.environ, "PATH": str(bindir) + os.pathsep + os.environ["PATH"]}
-            base = ["bash", str(installer), f"--package-root={package}"]
-            install = base + [f"--api-key-file={key}", "--reader-group=" + grp.getgrgid(os.getgid()).gr_name]
-            # Running and unknown service states stop before any plugin rename.
-            for status in ("0", "55", "99"):
-                result = subprocess.run(install, env={**env, "SUBTITLE_TEST_STATUS": status}, capture_output=True, text=True)
-                self.assertEqual(result.returncode, 1, result.stderr)
-                self.assertTrue((original / "original-marker").exists())
-            # Publishing failure rolls the original directory back and removes private staging.
-            result = subprocess.run(install, env={**env, "SUBTITLE_FAIL_PUBLISH": "1"}, capture_output=True, text=True)
-            self.assertEqual(result.returncode, 1, result.stderr)
-            self.assertTrue((original / "original-marker").exists())
-            self.assertEqual(list((package / "target/.subtitle-plugin-backups").iterdir()), [])
-            result = subprocess.run(install, env=env, capture_output=True, text=True)
-            self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertTrue((original / ".rest-adapter").exists())
-            self.assertEqual(list(original.parent.iterdir()), [original])
-            self.assertTrue((package / "target/.subtitle-plugin-backups/syno_opensubtitles.original/original-marker").exists())
-            self.assertEqual((original / "api-key").stat().st_mode & 0o777, 0o640)
-            self.assertEqual(subprocess.run(install, env=env, capture_output=True).returncode, 1)
-            result = subprocess.run(base + ["--restore"], env=env, capture_output=True, text=True)
-            self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertEqual((original / "original-marker").read_text(), "original")
-            self.assertFalse((original / "api-key").exists())
-            # Recover an interruption between renaming the original and publishing the adapter.
-            backup = package / "target/.subtitle-plugin-backups/syno_opensubtitles.original"
-            original.rename(backup)
-            result = subprocess.run(base + ["--restore"], env=env, capture_output=True, text=True)
-            self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertTrue((original / "original-marker").exists())
+        # Running and unknown service states stop before any plugin rename.
+        for status in ("0", "55", "99"):
+            self.run_setup(self.install, 1, SUBTITLE_TEST_STATUS=status)
+            self.assertTrue((self.original / "original-marker").exists())
+        # Publishing failure rolls the original directory back and removes private staging.
+        self.run_setup(self.install, 1, SUBTITLE_FAIL_PUBLISH="1")
+        self.assertTrue((self.original / "original-marker").exists())
+        self.assertEqual(list(self.state.iterdir()), [])
+        self.run_setup(self.install)
+        self.assertTrue((self.original / ".rest-adapter").exists())
+        self.assertEqual(list(self.original.parent.iterdir()), [self.original])
+        self.assertTrue((self.backup / "original-marker").exists())
+        self.assertEqual((self.original / "api-key").stat().st_mode & 0o777, 0o640)
+        self.run_setup(self.install, 1)
+        self.run_setup(self.restore)
+        self.assertEqual((self.original / "original-marker").read_text(), "original")
+        self.assertFalse((self.original / "api-key").exists())
+        # Recover an interruption between renaming the original and publishing the adapter.
+        self.original.rename(self.backup)
+        self.run_setup(self.restore)
+        self.assertTrue((self.original / "original-marker").exists())
+
+    def test_restore_after_an_update_replaced_the_adapter(self):
+        self.run_setup(self.install)
+        self.replace_plugin_as_an_update_does()
+        # A failure leaves the updated plugin and the backup where they were.
+        self.run_setup(self.restore, 1, SUBTITLE_FAIL_RESTORE="1")
+        self.assertTrue((self.original / "updated-marker").exists())
+        self.assertTrue((self.backup / "original-marker").exists())
+        self.assertEqual(list(self.state.iterdir()), [self.backup])
+        result = self.run_setup(self.restore)
+        self.assertTrue((self.original / "original-marker").exists())
+        self.assertFalse(self.backup.exists())
+        [replaced] = self.set_aside("replaced")
+        self.assertTrue((replaced / "updated-marker").exists())
+        self.assertIn(str(replaced), result.stdout)
+
+    def test_reinstall_after_an_update_replaced_the_adapter(self):
+        self.run_setup(self.install)
+        self.replace_plugin_as_an_update_does()
+        # A failure leaves the updated plugin and the earlier backup where they were.
+        self.run_setup(self.install, 1, SUBTITLE_FAIL_PUBLISH="1")
+        self.assertTrue((self.original / "updated-marker").exists())
+        self.assertTrue((self.backup / "original-marker").exists())
+        self.assertEqual(list(self.state.iterdir()), [self.backup])
+        result = self.run_setup(self.install)
+        self.assertTrue((self.original / ".rest-adapter").exists())
+        self.assertTrue((self.backup / "updated-marker").exists())
+        [previous] = self.set_aside("previous")
+        self.assertTrue((previous / "original-marker").exists())
+        self.assertIn(str(previous), result.stdout)
+        # The adapter is installed again, so a further install is refused.
+        self.run_setup(self.install, 1)
+        # --restore brings back the plugin the update installed.
+        self.run_setup(self.restore)
+        self.assertTrue((self.original / "updated-marker").exists())
+        self.assertTrue((previous / "original-marker").exists())
 
 
 if __name__ == "__main__":

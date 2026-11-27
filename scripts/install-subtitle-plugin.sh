@@ -66,14 +66,29 @@ if [[ -L $plugin || -L $backup ]]; then
     echo "Refusing a symlinked plugin or backup directory." >&2
     exit 1
 fi
+# Print a path in the backup directory that does not exist yet.
+unused_state_path() {
+    local path
+    path=$(mktemp -d "$state_dir/$1.XXXXXX") || return 1
+    rmdir "$path" || return 1
+    printf '%s\n' "$path"
+}
 staging=
-retired=
+retired=          # the adapter taken out by --restore; removed once replaced
+replaced_plugin=  # an unmarked plugin moved aside by --restore; always kept
+older_backup=     # an earlier backup moved aside by a reinstall; always kept
 cleanup() {
     local status=$?
-    if [[ ! -e $plugin && -d $backup ]]; then
+    if [[ ! -e $plugin && -n $replaced_plugin && -d $replaced_plugin ]]; then
+        mv "$replaced_plugin" "$plugin" || echo "Restore the plugin from $replaced_plugin." >&2
+    elif [[ ! -e $plugin && -d $backup ]]; then
         mv "$backup" "$plugin" || echo "Restore the original plugin from $backup." >&2
     elif [[ ! -e $plugin && -n $retired && -d $retired ]]; then
         mv "$retired" "$plugin" || echo "Restore the adapter from $retired." >&2
+    fi
+    # The backup slot is only empty here if a reinstall did not finish.
+    if [[ -n $older_backup && -d $older_backup && ! -e $backup ]]; then
+        mv "$older_backup" "$backup" || echo "Restore the earlier backup from $older_backup." >&2
     fi
     if [[ -n $staging && -d $staging ]]; then rm -r -- "$staging"; fi
     if [[ -e $plugin && -n $retired && -d $retired ]]; then rm -r -- "$retired"; fi
@@ -89,15 +104,19 @@ if [[ $restore == yes ]]; then
     fi
     if [[ ! -e $plugin ]]; then
         mv "$backup" "$plugin"
-    else
-        if [[ ! -f $plugin/.rest-adapter ]]; then
-            echo "Refusing to replace a plugin without the adapter marker." >&2
-            exit 1
-        fi
-        retired=$(mktemp -d "$state_dir/.subtitle-retired.XXXXXX")
-        rmdir "$retired"
+    elif [[ -f $plugin/.rest-adapter ]]; then
+        retired=$(unused_state_path .subtitle-retired)
         mv "$plugin" "$retired"
         mv "$backup" "$plugin"
+    elif [[ -d $plugin ]]; then
+        # No marker: a Video Station update has put its own plugin back.
+        replaced_plugin=$(unused_state_path syno_opensubtitles.replaced)
+        mv "$plugin" "$replaced_plugin"
+        mv "$backup" "$plugin"
+        echo "The plugin in place was not this adapter. It was kept at $replaced_plugin"
+    else
+        echo "The plugin path is not a directory; nothing was changed." >&2
+        exit 1
     fi
     echo "Original subtitle plugin restored. Start Video Station."
     exit 0
@@ -106,8 +125,14 @@ if [[ -z $key_file || ! -f $key_file || -L $key_file || ! -s $key_file ]]; then
     echo "Provide a nonempty API key file, not a symlink." >&2
     exit 2
 fi
-if [[ ! -d $plugin || -e $backup ]]; then
-    echo "Original plugin is missing or a backup already exists; restore before reinstalling." >&2
+if [[ ! -d $plugin ]]; then
+    echo "Original plugin is missing; restore it before reinstalling." >&2
+    exit 1
+fi
+# A backup beside an unmarked plugin means a Video Station update replaced the
+# adapter. Beside the adapter itself, it means the adapter is still installed.
+if [[ -e $backup && ( ! -d $backup || -f $plugin/.rest-adapter ) ]]; then
+    echo "A backup already exists; restore before reinstalling." >&2
     exit 1
 fi
 key_text=$(cat -- "$key_file")
@@ -136,11 +161,19 @@ cp -- "$key_file" "$staging/api-key"
 chown "root:$reader_group" "$staging/api-key"
 chmod 0640 "$staging/api-key"
 : > "$staging/.rest-adapter"
+if [[ -e $backup ]]; then
+    # The plugin in place now becomes the one that --restore brings back.
+    older_backup=$(unused_state_path syno_opensubtitles.previous)
+    mv "$backup" "$older_backup"
+fi
 mv "$plugin" "$backup"
 if ! mv "$staging" "$plugin"; then
     mv "$backup" "$plugin"
     exit 1
 fi
 staging=
+if [[ -n $older_backup ]]; then
+    echo "The earlier plugin backup was kept at $older_backup"
+fi
 echo "REST subtitle adapter installed; original plugin retained for --restore."
 echo "Start Video Station and use your OpenSubtitles.com login in subtitle settings."
