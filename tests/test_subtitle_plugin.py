@@ -247,6 +247,12 @@ class SubtitleInstallerTests(unittest.TestCase):
         self.run_setup(self.restore)
         self.assertTrue((self.original / "original-marker").exists())
 
+    def test_restore_refuses_an_api_key_file(self):
+        self.run_setup(self.install)
+        result = self.run_setup(self.restore + ["--api-key-file=unused"], 2)
+        self.assertIn("--restore takes no API key file", result.stderr)
+        self.assertTrue((self.original / ".rest-adapter").exists())
+
     def test_failed_restore_puts_the_adapter_back(self):
         self.run_setup(self.install)
         self.run_setup(self.restore, 1, SUBTITLE_FAIL_RESTORE="1")

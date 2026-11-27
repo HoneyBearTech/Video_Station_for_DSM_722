@@ -22,6 +22,10 @@ for option in "$@"; do
         *) usage >&2; exit 2 ;;
     esac
 done
+if [[ $restore == yes && -n $key_file ]]; then
+    echo "--restore takes no API key file." >&2
+    exit 2
+fi
 if [[ $EUID != 0 ]]; then
     echo "Run as root after stopping Video Station." >&2
     exit 1
@@ -99,7 +103,7 @@ trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 if [[ $restore == yes ]]; then
-    if [[ -n $key_file || ! -d $backup ]]; then
+    if [[ ! -d $backup ]]; then
         echo "No original plugin backup was found." >&2
         exit 1
     fi
