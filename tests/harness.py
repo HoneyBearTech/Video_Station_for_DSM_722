@@ -139,7 +139,13 @@ elif name == "synopkg":
     elif action == "is_onoff":
         sys.exit(0 if package and package["running"] else 1)
     elif action == "uninstall":
-        state.pop(target, None)
+        # MOCK_UNINSTALL: {"<pkg>": {"stuck": true}} reports success but leaves
+        # the package; {"<pkg>": {"also": ["<other>", ...]}} removes others too.
+        how = json.loads(os.environ.get("MOCK_UNINSTALL", "{}")).get(target, {})
+        if not how.get("stuck"):
+            state.pop(target, None)
+        for other in how.get("also", []):
+            state.pop(other, None)
         save()
     elif action == "install":
         path = Path(target)
@@ -188,7 +194,7 @@ class Run:
 
 
 def run_installer(choice="all", installed=None, arch="x86_64", curl=None, plant=None,
-                  drop_hashes=(), source_edits=()):
+                  drop_hashes=(), source_edits=(), uninstall=None):
     """Run the whole installer with --install=<choice> and return a Run."""
     require_container()
     with tempfile.TemporaryDirectory(prefix="vs722-test-") as directory:
@@ -245,7 +251,7 @@ def run_installer(choice="all", installed=None, arch="x86_64", curl=None, plant=
             ["bash", str(script), f"--install={choice}"],
             env={**os.environ, "PATH": str(binary) + ":" + os.environ["PATH"],
                  "MOCK_STATE": str(state_path), "MOCK_LOG": str(log_path), "MOCK_ARCH": arch,
-                 "MOCK_CURL": json.dumps(curl or {})},
+                 "MOCK_CURL": json.dumps(curl or {}), "MOCK_UNINSTALL": json.dumps(uninstall or {})},
             stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=30,
         )
         operations = [json.loads(line) for line in log_path.read_text().splitlines()]

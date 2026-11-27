@@ -17,6 +17,75 @@ CHOICES = {
     "onlyamc": {"CodecPack"},
 }
 
+TARGET = {"CodecPack": "30.1.0-3005", "VideoStation": "30.1.0-3153", "MediaServer": "20.0.5-3152"}
+
+AME_V4_OTHERS_CURRENT = {
+    "CodecPack": {"version": "4.0.0-4025", "running": True},
+    "VideoStation": {"version": "30.1.0-3153", "running": True},
+    "MediaServer": {"version": "20.0.5-3152", "running": True},
+}
+
+
+class UninstallSideEffectTests(unittest.TestCase):
+    def installs(self, run):
+        return [row[2].rsplit("/", 1)[1].split("-", 1)[0] for row in run.operations
+                if row[:2] == ["synopkg", "install"]]
+
+    def test_ame_v4_removal_that_also_removes_current_packages_reinstalls_them(self):
+        cascade = {"CodecPack": {"also": ["VideoStation", "MediaServer"]}}
+        for choice, packages in CHOICES.items():
+            with self.subTest(choice=choice):
+                run = run_installer(choice, AME_V4_OTHERS_CURRENT, uninstall=cascade)
+                self.assertEqual(run.returncode, 0, run.output)
+                # Every selected package was fetched and checked before any change.
+                self.assertEqual({name.split("-", 1)[0] for name in run.downloaded_files()}, packages)
+                curls = [index for index, row in enumerate(run.operations) if row[0] == "curl"]
+                self.assertLess(max(curls), min(run.mutations()))
+                self.assertEqual(sorted(self.installs(run)), sorted(packages))
+                self.assertEqual({name: value["version"] for name, value in run.state.items()},
+                                 {name: TARGET[name] for name in packages})
+                self.assertNotIn("already installed", run.output)
+
+    def test_ame_v4_removal_leaves_current_packages_alone(self):
+        run = run_installer("all", AME_V4_OTHERS_CURRENT)
+        self.assertEqual(run.returncode, 0, run.output)
+        self.assertEqual(sorted(run.downloaded_files()), sorted([
+            "CodecPack-x86_64-3.1.0-3005.spk", "VideoStation-x86_64-3.1.0-3153.spk",
+            "MediaServer-x86_64-2.0.5-3152.spk"]))
+        self.assertEqual(self.installs(run), ["CodecPack"])
+        self.assertEqual([row[2] for row in run.operations if row[:2] == ["synopkg", "uninstall"]],
+                         ["CodecPack"])
+        self.assertIn("Video Station 30.1.0-3153 already installed", run.output)
+        self.assertIn("Media Server 20.0.5-3152 already installed", run.output)
+        self.assertEqual({name: value["version"] for name, value in run.state.items()}, TARGET)
+
+    def test_uninstall_that_leaves_the_package_stops_before_installing(self):
+        cases = (
+            ("VideoStation", "Video Station 30.1.1-3168", "all"),
+            ("MediaServer", "Media Server 20.1.0-3304", "all"),
+            ("CodecPack", "Advanced Media Extensions 4.0.0-4025", "onlyamc"),
+        )
+        for package, label, choice in cases:
+            with self.subTest(package=package):
+                run = run_installer(choice, OLD_VERSIONS, uninstall={package: {"stuck": True}})
+                self.assertEqual(run.returncode, 1, run.output)
+                self.assertIn(f"Uninstalling {label} didn't work", run.output)
+                self.assertEqual(self.installs(run), [])
+                self.assertEqual(run.state[package], OLD_VERSIONS[package])
+                self.assertEqual(run.downloads_left, [])
+
+    def test_package_file_not_downloaded_stops_before_installing(self):
+        # Removing the wrong Video Station also takes an older Advanced Media
+        # Extensions with it, which was not planned for, so its file is missing.
+        installed = {
+            "CodecPack": {"version": "30.0.0-3001", "running": True},
+            "VideoStation": {"version": "30.1.1-3168", "running": True},
+        }
+        run = run_installer("noms", installed, uninstall={"VideoStation": {"also": ["CodecPack"]}})
+        self.assertEqual(run.returncode, 1, run.output)
+        self.assertIn("CodecPack-x86_64-3.1.0-3005.spk was not downloaded", run.output)
+        self.assertEqual(self.installs(run), [])
+
 
 class InstallationFlowTests(unittest.TestCase):
     def test_fresh_install_choices_install_only_requested_packages(self):
