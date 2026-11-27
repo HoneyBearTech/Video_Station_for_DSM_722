@@ -546,7 +546,7 @@ download_pkg(){
         host=$(echo "$base" | cut -d"/" -f3)
         echo -en "\nDownloading ${Cyan}${3}${Off} from "
         echo "$host"
-        curl -fL --proto '=https' --proto-redir '=https' --connect-timeout 30 --retry 1 "$url" -o "$file"
+        curl -q -fL --proto '=https' --proto-redir '=https' --connect-timeout 30 --retry 1 "$url" -o "$file"
         curlcode=$?
         if [[ $curlcode != "0" ]]; then
             # Delete partial download
