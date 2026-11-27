@@ -554,7 +554,6 @@ download_pkg(){
             if [[ $curlcode == "60" ]] || [[ $curlcode == "77" ]]; then
                 echo -e "${Error}ERROR${Off} Certificate check failed for $host!"
                 echo "Check the NAS date and time are correct, and update DSM."
-                echo "Nothing was changed on the NAS."
             else
                 echo -e "${Error}ERROR${Off} Failed to download ${3} from $host (curl exit code $curlcode)!"
             fi
