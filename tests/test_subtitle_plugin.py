@@ -247,6 +247,14 @@ class SubtitleInstallerTests(unittest.TestCase):
         self.run_setup(self.restore)
         self.assertTrue((self.original / "original-marker").exists())
 
+    def test_failed_restore_puts_the_adapter_back(self):
+        self.run_setup(self.install)
+        self.run_setup(self.restore, 1, SUBTITLE_FAIL_RESTORE="1")
+        self.assertTrue((self.original / ".rest-adapter").exists())
+        self.assertTrue((self.original / "api-key").exists())
+        self.assertTrue((self.backup / "original-marker").exists())
+        self.assertEqual(list(self.state.iterdir()), [self.backup])
+
     def test_restore_after_an_update_replaced_the_adapter(self):
         self.run_setup(self.install)
         self.replace_plugin_as_an_update_does()

@@ -79,18 +79,19 @@ replaced_plugin=  # an unmarked plugin moved aside by --restore; always kept
 older_backup=     # an earlier backup moved aside by a reinstall; always kept
 cleanup() {
     local status=$?
-    if [[ ! -e $plugin && -n $replaced_plugin && -d $replaced_plugin ]]; then
-        mv "$replaced_plugin" "$plugin" || echo "Restore the plugin from $replaced_plugin." >&2
-    elif [[ ! -e $plugin && -d $backup ]]; then
-        mv "$backup" "$plugin" || echo "Restore the original plugin from $backup." >&2
-    elif [[ ! -e $plugin && -n $retired && -d $retired ]]; then
-        mv "$retired" "$plugin" || echo "Restore the adapter from $retired." >&2
-    fi
+    # Put a plugin back, trying each copy in turn until one is in place.
+    local candidate
+    for candidate in "$replaced_plugin" "$backup" "$retired"; do
+        [[ ! -e $plugin ]] || break
+        [[ -n $candidate && -d $candidate ]] || continue
+        mv "$candidate" "$plugin" || echo "Could not move $candidate back to $plugin." >&2
+    done
     # The backup slot is only empty here if a reinstall did not finish.
     if [[ -n $older_backup && -d $older_backup && ! -e $backup ]]; then
         mv "$older_backup" "$backup" || echo "Restore the earlier backup from $older_backup." >&2
     fi
     if [[ -n $staging && -d $staging ]]; then rm -r -- "$staging"; fi
+    # If the adapter was moved back, $retired is gone and nothing is removed.
     if [[ -e $plugin && -n $retired && -d $retired ]]; then rm -r -- "$retired"; fi
     return "$status"
 }
