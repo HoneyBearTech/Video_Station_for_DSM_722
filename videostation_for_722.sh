@@ -256,13 +256,17 @@ echo "Using CPU type: $cputype"
 
 cleanup(){ 
     arg1=$?
-    for s in /tmp/CodecPack-"${cputype}"-*.spk; do rm -f "$s"; done
-    for s in /tmp/VideoStation-"${cputype}"-*.spk; do rm -f "$s"; done
-    for s in /tmp/MediaServer-"${cputype}"-*.spk; do rm -f "$s"; done
+    # Delete this run's private download folder
+    if [[ -n $workdir ]]; then
+        rm -rf -- "$workdir"
+    fi
     exit "${arg1}"
 }
 
 trap cleanup EXIT
+
+# Private download folder for this run (only root can read it)
+workdir=$(mktemp -d /tmp/vs722.XXXXXX) || exit
 
 progbar(){ 
     # $1 is pid of process
@@ -427,7 +431,7 @@ package_install(){
     # $3 is /volume2 etc
     [ "$trace" == "yes" ] && echo "${FUNCNAME[0]} called from ${FUNCNAME[1]}"
     #/usr/syno/bin/synopkg install_from_server "$1" "$3" >/dev/null &
-    /usr/syno/bin/synopkg install "/tmp/$1" "$3" >/dev/null &
+    /usr/syno/bin/synopkg install "${workdir:?}/$1" "$3" >/dev/null &
     pid=$!
     if [[ $3 ]]; then
         string="Installing ${Cyan}${2}${Off} on ${Cyan}$3${Off}"
@@ -460,20 +464,20 @@ download_pkg(){
         bases+=("https://global.download.synology.com/download/Package/spk/")
         bases+=("https://cndl.synology.cn/download/Package/spk/")
     fi
-    if [[ ! -f "/tmp/${3:?}" ]]; then
-        for base in "${bases[@]}"; do
-            url="${base}${1:?}/${2:?}/${3:?}"
-            echo -en "\nDownloading ${Cyan}${3}${Off} from "
-            echo "$base" | cut -d"/" -f3
-            #if curl -kfL --connect-timeout 30 --retry 5 --retry-all-errors "$url" -o "/tmp/$3"; then
-            if curl -kfL --connect-timeout 30 --retry 1 "$url" -o "/tmp/$3"; then
-                if [[ -f "/tmp/$3" ]]; then
-                    break
-                fi
+    # Never reuse a file that is already there
+    rm -f -- "${workdir:?}/${3:?}"
+    for base in "${bases[@]}"; do
+        url="${base}${1:?}/${2:?}/${3:?}"
+        echo -en "\nDownloading ${Cyan}${3}${Off} from "
+        echo "$base" | cut -d"/" -f3
+        #if curl -kfL --connect-timeout 30 --retry 5 --retry-all-errors "$url" -o "$workdir/$3"; then
+        if curl -kfL --connect-timeout 30 --retry 1 "$url" -o "$workdir/$3"; then
+            if [[ -f "$workdir/$3" ]]; then
+                break
             fi
-        done
-    fi
-    if [[ ! -f "/tmp/${3:?}" ]]; then
+        fi
+    done
+    if [[ ! -f "$workdir/${3:?}" ]]; then
         ding
         echo -e "${Error}ERROR 3${Off} Failed to download ${3}!"
         exit 3
@@ -580,7 +584,7 @@ if ! check_pkg_installed CodecPack && [[ $ame_version != "30.1.0-3005" ]]; then
     echo "Preventing Advanced Media Extensions from auto updating"
     /usr/syno/bin/synosetkeyvalue /var/packages/CodecPack/INFO version "30.1.0-3005"
     package_start CodecPack "Advanced Media Extensions"
-    rm -f "/tmp/CodecPack-${cputype}-3.1.0-3005.spk"
+    rm -f "$workdir/CodecPack-${cputype}-3.1.0-3005.spk"
 else
     echo -e "\n${Cyan}Advanced Media Extensions${Off} $ame_version already installed"
 fi
@@ -598,8 +602,8 @@ if [[ $no_vs != "yes" ]]; then
         #/usr/syno/bin/synosetkeyvalue /var/packages/VideoStation/INFO version "30.1.1-3168"
         /usr/syno/bin/synosetkeyvalue /var/packages/VideoStation/INFO version "30.1.0-3153"
         package_start VideoStation "Video Station"
-        #rm -f "/tmp/VideoStation-${cputype}-3.1.0-3168.spk"
-        rm -f "/tmp/VideoStation-${cputype}-3.1.0-3153.spk"
+        #rm -f "$workdir/VideoStation-${cputype}-3.1.0-3168.spk"
+        rm -f "$workdir/VideoStation-${cputype}-3.1.0-3153.spk"
     else
         echo -e "\n${Cyan}Video Station${Off} $vs_version already installed"
     fi
@@ -615,7 +619,7 @@ if [[ $no_ms != "yes" ]]; then
         echo "Preventing Media Server from auto updating"
         /usr/syno/bin/synosetkeyvalue /var/packages/MediaServer/INFO version "20.0.5-3152"
         package_start MediaServer "Media Server"
-        rm -f "/tmp/MediaServer-${cputype}-2.0.5-3152.spk"
+        rm -f "$workdir/MediaServer-${cputype}-2.0.5-3152.spk"
     else
         echo -e "\n${Cyan}Media Server${Off} $ms_version already installed"
     fi
