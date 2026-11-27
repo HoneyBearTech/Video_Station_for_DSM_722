@@ -246,8 +246,8 @@ else
     echo -e "\nUnsupported or unknown CPU platform_name or architecture"
     echo "  - CPU type: $cputype"
     echo "  - Platform: $platform_name"
-    echo -e "Please create an issue at:"
-    echo -e "https://github.com/007revad/Video_Station_for_DSM_722/issues\n"
+    echo -e "Please see:"
+    echo -e "https://github.com/$repo\n"
     exit
 fi
 echo "Using CPU type: $cputype"
