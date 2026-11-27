@@ -98,7 +98,7 @@ if options="$(getopt -o hvt -l \
             --volume)           # Volume to install packages on
                 if [[ ! $2 =~ ^/volume[1-9][0-9]*$ ]]; then
                     ding
-                    echo -e "Invalid --volume value '$2' (use /volume1, /volume2 etc)\n"
+                    printf "Invalid --volume value '%s' (use /volume1, /volume2 etc)\n\n" "$2"
                     usage
                     exit 2  # Invalid argument
                 fi
@@ -125,7 +125,7 @@ if options="$(getopt -o hvt -l \
                     choice="Only installing Advanced Media Codecs"
                 else
                     ding
-                    echo -e "Invalid --install value '$2'\n"
+                    printf "Invalid --install value '%s'\n\n" "$2"
                     usage
                     exit 2  # Invalid argument
                 fi
@@ -138,7 +138,7 @@ if options="$(getopt -o hvt -l \
                 ;;
             *)                  # Show usage options
                 ding
-                echo -e "Invalid option '$1'\n"
+                printf "Invalid option '%s'\n\n" "$1"
                 usage
                 exit 2  # Invalid argument
                 ;;
@@ -154,7 +154,7 @@ fi
 # Nothing is allowed after the options
 if [[ $# -gt "0" ]]; then
     ding
-    echo -e "Unexpected argument '$1'\n"
+    printf "Unexpected argument '%s'\n\n" "$1"
     usage
     exit 2  # Invalid argument
 fi
