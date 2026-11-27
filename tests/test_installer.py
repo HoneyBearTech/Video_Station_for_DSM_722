@@ -1,9 +1,11 @@
-"""Check how packages are downloaded and verified, using stand-in DSM commands."""
+"""Check the options, and how packages are downloaded and verified, using stand-in DSM commands."""
 
 import re
+import subprocess
 import unittest
 
-from harness import ALL_FILES, SOURCE, recorded_hashes, run_installer, sha256, tampered
+from harness import (ALL_FILES, SCRIPT, SOURCE, recorded_hashes, require_container, run_installer,
+                     sha256, tampered)
 
 CODECPACK = "CodecPack-x86_64-3.1.0-3005.spk"
 
@@ -175,6 +177,69 @@ class DownloadTests(unittest.TestCase):
                 self.assertEqual(run.downloads_left, [])
                 self.assertTrue(any("/tmp/vs722." in row[row.index("-o") + 1]
                                     for row in run.curl_calls()))
+
+
+class CommandLineTests(unittest.TestCase):
+    """Ported from PR #3: a mistyped option must never run the installer."""
+
+    def parse(self, *args, show):
+        """Run only the option parser, then print the given shell expression."""
+        require_container()
+        parser = SOURCE.split("# Check script is running as root", 1)[0]
+        return subprocess.run(["bash", "-c", parser + "\nprintf '%s' " + show, str(SCRIPT), *args],
+                              capture_output=True, text=True, timeout=10)
+
+    def test_bad_or_extra_options_exit_2_before_anything_runs(self):
+        for args in (("--unknown",), ("--install",), ("--install=bad",), ("--install=",),
+                     ("--volume",), ("--volume=",), ("--volume=/volume0",), ("--volume=/tmp",),
+                     ("--volume=/volume2/../volume1",), ("--volume=/volumeUSB1",),
+                     ("--volume=volume2",), ("--install=all", "extra"), ("-l",), ("--log",),
+                     ("-d",), ("--debug",), ("--autoupdate=3",)):
+            with self.subTest(args=args):
+                run = run_installer(args=args)
+                self.assertEqual(run.returncode, 2, run.output)
+                self.assertIn("Usage:", run.output)
+                # Not even the root check ran.
+                self.assertEqual(run.operations, [])
+
+    def test_help_and_version_exit_0_before_anything_runs(self):
+        for flag, expected in (("--help", "Usage:"), ("-h", "--volume=/volumeN"),
+                               ("--version", "Video_Station_for_DSM_722 v1.4.22-hbt.2"),
+                               ("-v", "Video_Station_for_DSM_722")):
+            with self.subTest(flag=flag):
+                run = run_installer(args=(flag,))
+                self.assertEqual(run.returncode, 0, run.output)
+                self.assertIn(expected, run.output)
+                self.assertEqual(run.operations, [])
+
+    def test_trace_option_works(self):
+        for flag in ("-t", "--trace"):
+            with self.subTest(flag=flag):
+                run = run_installer("onlyamc", extra_args=(flag,))
+                self.assertEqual(run.returncode, 0, run.output)
+                self.assertIn("package_install called from main", run.output)
+        run = run_installer("onlyamc")
+        self.assertNotIn("called from", run.output)
+
+    def test_install_choices_set_the_expected_package_flags(self):
+        cases = {"all": "yes||", "novs": "yes|yes|", "noms": "yes||yes", "onlyamc": "yes|yes|yes"}
+        for choice, expected in cases.items():
+            with self.subTest(choice=choice):
+                result = self.parse(f"--install={choice}", show='"$auto|$no_vs|$no_ms"')
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(result.stdout, expected)
+
+    def test_volume_value_is_kept_as_given(self):
+        for args in (("--volume=/volume2",), ("--volume", "/volume12"), ("--install=all", "--volume=/volume3")):
+            with self.subTest(args=args):
+                result = self.parse(*args, show='"$install_volume"')
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(result.stdout, args[-1].rsplit("=", 1)[-1])
+
+    def test_no_op_options_are_gone(self):
+        for name in ("autoupdate", "debug=yes", "log=yes", "delay="):
+            with self.subTest(name=name):
+                self.assertNotIn(name, SOURCE)
 
 
 if __name__ == "__main__":

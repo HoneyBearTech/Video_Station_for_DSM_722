@@ -7,7 +7,7 @@
 
 The Video Station icon above is Copyright © 2004-2026 [Synology Inc.](https://kb.synology.com/en-br/DSM/help/DSM/Home/about?version=7)
 
-> **This copy (v1.4.22-hbt.1)** has safety changes: it checks the HTTPS certificate and a SHA-256 checksum for every package it downloads, uses a private download folder, and downloads everything before it changes anything.<br>
+> **This copy (v1.4.22-hbt.2)** has safety changes: it checks the HTTPS certificate and a SHA-256 checksum for every package it downloads, uses a private download folder, and downloads everything before it changes anything.<br>
 > It has no self-updater. To update, download a new copy from https://github.com/HoneyBearTech/Video_Station_for_DSM_722
 
 ### Description
@@ -51,6 +51,10 @@ There are optional flags you can use when running the script:
 Options:
   -h, --help            Show this help message
   -v, --version         Show the script version
+  -t, --trace           Show which script functions are called
+      --volume=/volumeN Install packages that need installing on volume N
+                        (e.g. --volume=/volume2). Needs the lib folder that
+                        comes with this script. See docs/package-volume.md
       --install=OPTION  Automatically install OPTION (for use when scheduled)
                         OPTION can be either: 
                           'all' to install Video Station, Media Server and
@@ -63,7 +67,20 @@ Options:
                           videostation_for_722.sh --install=novs
                           videostation_for_722.sh --install=noms
                           videostation_for_722.sh --install=onlyamc
+                          videostation_for_722.sh --install=all --volume=/volume2
 ```
+
+A mistyped option or an extra word stops the script with exit code 2 before it does anything.
+
+### Installing on a different volume
+
+`--volume=/volume2` installs the packages on volume 2 instead of Package Center's default volume. Keep the `lib` folder in the same folder as the script. The script's folder and the `lib` folder must be owned by root and not writable by others (the script tells you how to fix this if they aren't), and the folders above them must only be writable by root or administrators.
+
+- The volume is checked before anything is downloaded or changed. If it can't be used, the script stops and says "Nothing was changed on the NAS."
+- Packages that are already the right version are not moved, so your packages can end up on different volumes.
+- **Not yet tested on a real NAS.** The old packages are removed before the new ones are installed. If installing on the volume fails at that point, the package stays uninstalled; the script says which packages were removed and how to run it again without `--volume`.
+
+See [Installing the packages on a chosen volume](docs/package-volume.md) for the details.
 
 ### To run the script via task scheduler
 

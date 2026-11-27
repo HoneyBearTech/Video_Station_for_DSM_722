@@ -4,6 +4,31 @@ A short record of each piece of work on Video_Station_for_DSM_722: what shipped,
 or what a review found, and where to look. Newest first. The reasons behind the
 choices are in the [decisions log](decisions-log.md).
 
+## 2026-11-27: `pr3-rebase`
+
+Draft PR #3's two features rebuilt by hand on current `main`. PR #3's older
+safety code was left out. Both PRs are drafts until tested on a NAS.
+
+- **#8, install volume (`v1.4.22-hbt.2`):**
+  - `--volume=/volumeN` installs the packages on a chosen volume through
+    DSM's package service.
+  - Before anything changes, it checks the volume and asks DSM about each
+    package. It stops if DSM refuses.
+  - A late failure reports only what it actually saw removed.
+  - It refuses to load its helper unless the script folder and `lib/` are
+    root-only.
+  - Bad options exit 2, `-t`/`--trace` works, and the unused options are
+    gone.
+  - The scheduler guide now says `--install=`.
+  - 59 tests.
+- **#9, optional REST subtitle plugin:**
+  - The plugin and a setup/restore script.
+  - Restore and reinstall work after a Video Station update, and a failed
+    restore puts the plugin back.
+  - The key is written from the checked text and must be owned by root.
+  - Only the official API servers are accepted.
+  - 46 tests.
+
 ## 2026-11-27: `safety-fixes`
 
 Script safety fixes, version `v1.4.22-hbt.1` (#7):
