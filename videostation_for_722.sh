@@ -584,7 +584,7 @@ volume_install_failed(){
             elif [[ -n $target ]]; then
                 echo "  - $(pkg_name "$pkg"): installed ($version) but not on $install_volume (it is in $target)"
             else
-                echo "  - $(pkg_name "$pkg"): installed ($version) but not on $install_volume (where is not known)"
+                echo "  - $(pkg_name "$pkg"): installed ($version), location unknown - check Package Center"
             fi
         else
             echo "  - $(pkg_name "$pkg"): state uncertain (synopkg status $code) - check Package Center"
