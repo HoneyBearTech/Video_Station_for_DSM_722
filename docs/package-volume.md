@@ -24,16 +24,24 @@ Without `--volume`, the script works exactly as before: DSM's
   script checks for all of them rather than assuming.
 - A volume path of the form `/volume1`, `/volume2` and so on. Anything else
   stops the script with exit code 2 before it does anything.
-- The `lib` folder and `lib/package_volume.sh` must be owned by root, must not
-  be links, and must not be writable by group or others. The script runs this
-  file as root, so anyone who could change it could run commands as root. If
-  this isn't the case the script stops, changes nothing, and prints the
-  commands to fix it:
+- The script's folder, the `lib` folder and `lib/package_volume.sh` must be
+  owned by root, must not be links, and must not be writable by group or
+  others. The script runs `lib/package_volume.sh` as root, so anyone who could
+  change it, or replace it in its folder, could run commands as root. If this
+  isn't the case the script stops, changes nothing, and prints the commands to
+  fix it, for example:
 
   ```sh
+  sudo chown root:root /volume1/scripts
+  sudo chmod go-w /volume1/scripts
   sudo chown -R root:root /volume1/scripts/lib
   sudo chmod -R go-w /volume1/scripts/lib
   ```
+
+- **The folders above the script's folder** (for example `/volume1`) must
+  also only be writable by root or administrators. Anyone who can write to
+  any of them could replace the script or `lib` folder. The script doesn't
+  check these, so check them yourself.
 
   Files copied with File Station into a shared folder usually belong to your
   own user, so you'll normally need to run these once.
@@ -88,23 +96,27 @@ because DSM may not answer it for a package that is still installed.
 If this happens, the script:
 
 - asks DSM again about each package and says, for each one, only what DSM
-  reports now: not installed (with the version it had when the run started),
-  installed on the chosen volume, installed but somewhere else (and where, if
-  DSM says), or "state uncertain - check Package Center";
-- lists the packages this run removed that are not installed now. It only
-  says "This run did not remove any package." when DSM confirms that;
+  reports now: not installed, installed on the chosen volume, installed but
+  somewhere else (and where), installed with the location unknown ("check
+  Package Center"), or "state uncertain - check Package Center";
+- lists every package this run removed, with the version it had when the run
+  started. This list comes from the removals the script saw happen (including
+  packages that went when Advanced Media Extensions 4.x was removed), not from
+  comparing versions. It says "This run did not remove any package." only when
+  it removed none;
 - prints the command to run again **without** `--volume`, which installs
   the packages on Package Center's default volume instead;
 - exits with code 1.
 
-For example:
+For example, after installing Advanced Media Extensions and then failing to
+replace Video Station 3.1.1:
 
 ```
 ERROR Video Station could not be installed on /volume2
 What DSM reports now:
   - Advanced Media Extensions: installed (30.1.0-3005) on /volume2
-  - Video Station: not installed (was 30.1.1-3168 when this run started)
-This run removed:
+  - Video Station: not installed
+This run removed (what is installed now is listed above):
   - Video Station 30.1.1-3168
 To install the packages on Package Center's default volume, run the script again without --volume:
   sudo bash /volume1/scripts/videostation_for_722.sh --install=all
