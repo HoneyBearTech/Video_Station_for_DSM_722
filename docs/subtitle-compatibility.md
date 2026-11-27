@@ -32,7 +32,8 @@ The setup script copies your API key into the plugin folder as `api-key`, owned
 by `root`, with mode `0640`. It is group readable because Video Station does not
 run the plugin as root: the plugin reads the key through its group. Only root can
 change the file, and other users cannot read it. Every member of that group can
-read it, so do not choose a broad group such as `users`.
+read it, so do not choose a broad group such as `users`. The plugin refuses a key
+file that is not owned by `root` or that other users can access.
 
 ## What changed between the official packages
 

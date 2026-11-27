@@ -312,7 +312,8 @@ function subtitleRestMain()
             throw new RuntimeException('Use --action=search or --action=download');
         }
         $keyPath = getenv('SUBTITLE_REST_KEY_FILE') ?: __DIR__ . '/api-key';
-        if (is_link($keyPath) || !is_file($keyPath) || (fileperms($keyPath) & 0007) !== 0) {
+        if (is_link($keyPath) || !is_file($keyPath) || fileowner($keyPath) !== 0 ||
+                (fileperms($keyPath) & 0007) !== 0) {
             throw new RuntimeException('API key file is missing or has unsafe permissions');
         }
         $key = file_get_contents($keyPath);

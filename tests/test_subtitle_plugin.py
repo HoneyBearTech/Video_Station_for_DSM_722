@@ -157,6 +157,26 @@ class SubtitleAdapterTests(unittest.TestCase):
         self.assertIn("Use --action=", result.stderr)
         self.assertNotIn("API key", result.stderr)
 
+    def check_key_owned_by(self, uid):
+        if os.geteuid() != 0:
+            self.skipTest("setting the key file owner needs root")
+        key = self.folder / "key"
+        key.write_text("private-key")
+        key.chmod(0o640)
+        os.chown(key, uid, -1)
+        # Without a username the plugin stops after the key check, before any network access.
+        result = subprocess.run([PHP, "-n", str(PLUGIN), "--action=search"],
+            env={**os.environ, "SUBTITLE_REST_KEY_FILE": str(key)}, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 1)
+        self.assertNotIn("private-key", result.stderr + result.stdout)
+        return result.stderr
+
+    def test_root_owned_key_is_accepted(self):
+        self.assertIn("username and password are required", self.check_key_owned_by(0))
+
+    def test_key_not_owned_by_root_is_rejected(self):
+        self.assertIn("unsafe permissions", self.check_key_owned_by(65534))
+
     def test_world_readable_key_is_rejected_before_network_access(self):
         key = self.folder / "key"
         key.write_text("private-key")
