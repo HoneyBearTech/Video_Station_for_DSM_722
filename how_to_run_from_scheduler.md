@@ -16,7 +16,9 @@ To run a script from Task Scheduler follow these steps:
 9. Click on the task - but **don't** enable it - then click **Run**.
 10. Once the script has run you can delete the task, or keep in case you need it again.
 
-**Note:** If you don't want the script to install all 3 packages (Video Station, Media Server and Advanced Media Codecs) you can schedule the script to run with the `install=` option to specify which package(s) to install. See [Options when running the script](https://github.com/HoneyBearTech/Video_Station_for_DSM_722?tab=readme-ov-file#options-when-running-the-script) for more information.
+**Note:** If you don't want the script to install all 3 packages (Video Station, Media Server and Advanced Media Codecs) you can schedule the script to run with the `--install=` option to specify which package(s) to install. See [Options when running the script](https://github.com/HoneyBearTech/Video_Station_for_DSM_722?tab=readme-ov-file#options-when-running-the-script) for more information.
+
+**Choosing the volume:** To install the packages on a volume other than Package Center's default, add `--volume=` with the volume, e.g. **/volume1/scripts/videostation_for_722.sh --install=all --volume=/volume2**. Keep the `lib` folder that comes with the script in the same folder as the script. If the volume can't be used the script stops before changing anything and its output says why. See [Installing the packages on a chosen volume](docs/package-volume.md).
 
 **Here's some screenshots showing what needs to be set:**
 
