@@ -760,15 +760,22 @@ if [[ -n $install_volume ]]; then
             VideoStation) [[ $need_vs == "yes" ]] || continue ;;
             MediaServer)  [[ $need_ms == "yes" ]] || continue ;;
         esac
-        if [[ -n ${versions_before[$pkg]} ]]; then
-            # DSM may not answer for a package that is still installed
-            if ! volume_check_package "$pkg" "$install_volume" 2>/dev/null; then
-                echo "Note: DSM could not check $(pkg_name "$pkg") for $install_volume while it is installed."
-                echo "      It is checked again just before it is installed."
-            fi
-        elif ! volume_check_package "$pkg" "$install_volume"; then
+        volume_check_package "$pkg" "$install_volume" 2>/dev/null
+        code="$?"
+        if [[ $code == "0" ]]; then
+            continue
+        elif [[ $code == "3" ]]; then
             ding
-            echo -e "${Error}ERROR${Off} DSM says $(pkg_name "$pkg") can't be installed on $install_volume"
+            echo -e "${Error}ERROR${Off} DSM refused to install $(pkg_name "$pkg") on $install_volume"
+            echo "Nothing was changed on the NAS."
+            exit 2
+        elif [[ -n ${versions_before[$pkg]} ]]; then
+            # DSM may not answer for a package that is still installed
+            echo "Note: DSM could not check $(pkg_name "$pkg") for $install_volume while it is installed."
+            echo "      It is checked again just before it is installed."
+        else
+            ding
+            echo -e "${Error}ERROR${Off} DSM could not check if $(pkg_name "$pkg") can be installed on $install_volume"
             echo "Nothing was changed on the NAS."
             exit 2
         fi

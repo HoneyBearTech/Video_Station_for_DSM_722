@@ -89,6 +89,9 @@ volume_check_package(){
     # $1: package ID; $2: requested data volume.
     # Asks DSM whether the package can be installed on the volume. This does
     # not change anything. DSM may not answer for a package that is installed.
+    # Returns 0 if DSM says yes, 3 if DSM gave a valid reply that says no
+    # (the volume is occupied or not offered for this package), and 1 if the
+    # check could not be done (call failed, timed out or the reply was unusable).
     local package="$1" volume="$2" reply encoded_id
     if [[ ! $package =~ ^[A-Za-z][A-Za-z0-9_-]*$ ]]; then
         echo "A package ID is required." >&2
@@ -98,14 +101,23 @@ volume_check_package(){
     reply=$(volume_api_call api=SYNO.Core.Package.Installation method=check version=1 \
         "id=$encoded_id" 'install_type=""' install_on_cold_storage=false \
         breakpkgs=null blCheckDep=false replacepkgs=null) || return 1
-    if ! printf '%s\n' "$reply" | jq -e --arg volume "$volume" '
+    if printf '%s\n' "$reply" | jq -e --arg volume "$volume" '
             .data.is_occupied == false and
             (.data.volume_list | type == "array") and
             any(.data.volume_list[]; .mount_point == $volume)
             ' >/dev/null 2>&1; then
-        echo "The package pre-check did not allow the selected volume." >&2
-        return 1
+        return 0
     fi
+    if printf '%s\n' "$reply" | jq -e --arg volume "$volume" '
+            .data.is_occupied == true or
+            ((.data.volume_list | type == "array") and
+             (any(.data.volume_list[]; .mount_point == $volume) | not))
+            ' >/dev/null 2>&1; then
+        echo "The package pre-check did not allow the selected volume." >&2
+        return 3
+    fi
+    echo "The package pre-check reply could not be understood." >&2
+    return 1
 }
 
 volume_install_spk(){

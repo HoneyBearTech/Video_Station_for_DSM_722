@@ -208,8 +208,19 @@ class VolumeTests(unittest.TestCase):
                 result, calls, _ = self.run_helper(
                     command='volume_check_package VideoStation /volume2',
                     CHECK_REPLY=json.dumps({"success": True, "data": data}))
-                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(result.returncode, 3, "a valid reply that says no")
                 self.assertEqual(len(calls), 1)
+        for reply in ("not JSON", json.dumps({"success": False, "error": {"code": 4501}}),
+                      json.dumps({"success": True, "data": {}}),
+                      json.dumps({"success": True, "data": {"is_occupied": False}})):
+            with self.subTest(reply=reply):
+                result, calls, _ = self.run_helper(
+                    command='volume_check_package VideoStation /volume2', CHECK_REPLY=reply)
+                self.assertEqual(result.returncode, 1, "the check could not be done")
+                self.assertEqual(len(calls), 1)
+        result, calls, _ = self.run_helper(command='volume_check_package VideoStation /volume2',
+                                           PROCESS_STATUS="124")
+        self.assertEqual(result.returncode, 1, "a timed-out call")
         result, calls, _ = self.run_helper(command='volume_check_package ../VideoStation /volume2')
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual(calls, [])
