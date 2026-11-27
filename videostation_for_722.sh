@@ -22,13 +22,12 @@
 # before someone decided to scrap it and cannibalise AME to save a few dollars
 #------------------------------------------------------------------------------
 # TODO
-# Figure out how to install already downloaded package to specific volume
 # Figure out where package center saves it's settings
 # Figure out how to run VideoStation 3.1.1-3168 with CodecPack 3.1.0-3005
 #   or add OpenSubtitle changes from 3.1.1-3168 to 3.1.0-3153
 #------------------------------------------------------------------------------
 
-scriptver="v1.4.22-hbt.1"
+scriptver="v1.4.22-hbt.2"
 script=Video_Station_for_DSM_722
 repo="HoneyBearTech/Video_Station_for_DSM_722"
 
@@ -39,8 +38,125 @@ ding(){
 # Save options used for getopt
 args=("$@")
 
-if [[ $1 == "--trace" ]] || [[ $1 == "-t" ]]; then
-    trace="yes"
+usage(){ 
+    cat <<EOF
+Usage: $(basename "$0") [options]
+
+Options:
+  -h, --help            Show this help message
+  -v, --version         Show the script version
+  -t, --trace           Show which script functions are called
+      --volume=/volumeN Install packages that need installing on volume N
+                        (e.g. --volume=/volume2). Needs the lib folder that
+                        comes with this script. See docs/package-volume.md
+      --install=OPTION  Automatically install OPTION (for use when scheduled)
+                        OPTION can be either: 
+                          'all' to install Video Station, Media Server and
+                            Advanced Media Codecs
+                          'novs' to install all except Video Station
+                          'noms' to install all except Media Server
+                          'onlyamc' to only install Advanced Media Codecs
+                        Examples:
+                          videostation_for_722.sh --install=all
+                          videostation_for_722.sh --install=novs
+                          videostation_for_722.sh --install=noms
+                          videostation_for_722.sh --install=onlyamc
+                          videostation_for_722.sh --install=all --volume=/volume2
+
+EOF
+}
+
+scriptversion(){ 
+    cat <<EOF
+$script $scriptver - by 007revad
+
+See https://github.com/$repo
+EOF
+    exit 0
+}
+
+
+install_volume=""
+install_choice=""
+
+# Check for flags with getopt
+if options="$(getopt -o hvt -l \
+    install:,volume:,help,version,trace -- "${args[@]}")"; then
+    eval set -- "$options"
+    while true; do
+        case "${1,,}" in
+            -h|--help)          # Show usage options
+                usage
+                exit
+                ;;
+            -v|--version)       # Show script version
+                scriptversion
+                ;;
+            -t|--trace)         # Show which functions are called
+                trace="yes"
+                ;;
+            --volume)           # Volume to install packages on
+                if [[ ! $2 =~ ^/volume[1-9][0-9]*$ ]]; then
+                    ding
+                    echo -e "Invalid --volume value '$2' (use /volume1, /volume2 etc)\n"
+                    usage
+                    exit 2  # Invalid argument
+                fi
+                install_volume="$2"
+                shift
+                ;;
+            --install)             # Specify pkgs to install or skip
+                color=no        # Disable colour text in task scheduler emails
+                if [[ ${2,,} == "all" ]]; then
+                    auto="yes"
+                    choice="Installing All"
+                elif [[ ${2,,} == "novs" ]]; then
+                    auto="yes"
+                    no_vs="yes"
+                    choice="Skipping Video Station"
+                elif [[ ${2,,} == "noms" ]]; then
+                    auto="yes"
+                    no_ms="yes"
+                    choice="Skipping Media Server"
+                elif [[ ${2,,} == "onlyamc" ]]; then
+                    auto="yes"
+                    no_vs="yes"
+                    no_ms="yes"
+                    choice="Only installing Advanced Media Codecs"
+                else
+                    ding
+                    echo -e "Invalid --install value '$2'\n"
+                    usage
+                    exit 2  # Invalid argument
+                fi
+                install_choice="${2,,}"
+                shift
+                ;;
+            --)
+                shift
+                break
+                ;;
+            *)                  # Show usage options
+                ding
+                echo -e "Invalid option '$1'\n"
+                usage
+                exit 2  # Invalid argument
+                ;;
+        esac
+        shift
+    done
+else
+    echo
+    usage
+    exit 2  # Invalid option
+fi
+
+# Nothing is allowed after the options
+if [[ $# -gt "0" ]]; then
+    ding
+    echo -e "Unexpected argument '$1'\n"
+    usage
+    exit 2  # Invalid argument
 fi
 
 # Check script is running as root
@@ -84,114 +200,6 @@ else
     echo ""
 fi
 
-
-usage(){ 
-    cat <<EOF
-Usage: $(basename "$0") [options]
-
-Options:
-  -h, --help            Show this help message
-  -v, --version         Show the script version
-      --install=OPTION  Automatically install OPTION (for use when scheduled)
-                        OPTION can be either: 
-                          'all' to install Video Station, Media Server and
-                            Advanced Media Codecs
-                          'novs' to install all except Video Station
-                          'noms' to install all except Media Server
-                          'onlyamc' to only install Advanced Media Codecs
-                        Examples:
-                          videostation_for_722.sh --install=all
-                          videostation_for_722.sh --install=novs
-                          videostation_for_722.sh --install=noms
-                          videostation_for_722.sh --install=onlyamc
-
-EOF
-}
-
-scriptversion(){ 
-    cat <<EOF
-$script $scriptver - by 007revad
-
-See https://github.com/$repo
-EOF
-    exit 0
-}
-
-
-autoupdate=""
-
-# Check for flags with getopt
-if options="$(getopt -o abcdefghijklmnopqrstuvwxyz0123456789 -l \
-    autoupdate:,install:,help,version,log,debug -- "${args[@]}")"; then
-    eval set -- "$options"
-    while true; do
-        case "${1,,}" in
-            -h|--help)          # Show usage options
-                usage
-                exit
-                ;;
-            -v|--version)       # Show script version
-                scriptversion
-                ;;
-            -l|--log)           # Log
-                log=yes
-                ;;
-            -d|--debug)         # Show and log debug info
-                debug=yes
-                ;;
-            --install)             # Specify pkgs to install or skip
-                color=no        # Disable colour text in task scheduler emails
-                if [[ ${2,,} == "all" ]]; then
-                    auto="yes"
-                    choice="Installing All"
-                elif [[ ${2,,} == "novs" ]]; then
-                    auto="yes"
-                    no_vs="yes"
-                    choice="Skipping Video Station"
-                elif [[ ${2,,} == "noms" ]]; then
-                    auto="yes"
-                    no_ms="yes"
-                    choice="Skipping Media Server"
-                elif [[ ${2,,} == "onlyamc" ]]; then
-                    auto="yes"
-                    no_vs="yes"
-                    no_ms="yes"
-                    choice="Only installing Advanced Media Codecs"
-                else
-                    ding
-                    echo -e "Missing argument to auto!\n"
-                    usage
-                    exit 2  # Missing argument
-                fi
-                shift
-                ;;
-            --autoupdate)       # Auto update script
-                autoupdate=yes
-                if [[ $2 =~ ^[0-9]+$ ]]; then
-                    delay="$2"
-                    shift
-                else
-                    delay="0"
-                fi
-                ;;
-            --)
-                shift
-                break
-                ;;
-            *)                  # Show usage options
-                ding
-                echo -e "Invalid option '$1'\n"
-                usage
-                exit 2  # Invalid argument
-                ;;
-        esac
-        shift
-    done
-else
-    echo
-    usage
-    exit
-fi
 
 # Shell Colors
 if [[ $color != "no" ]]; then
@@ -251,6 +259,33 @@ else
     exit
 fi
 echo "Using CPU type: $cputype"
+
+# Check the volume set with --volume before downloading or changing anything
+if [[ -n $install_volume ]]; then
+    if [[ ! -f "$scriptpath/lib/package_volume.sh" ]]; then
+        ding
+        echo -e "${Error}ERROR${Off} --volume needs $scriptpath/lib/package_volume.sh"
+        echo "Copy the lib folder that comes with this script into the same folder as the script."
+        echo "Nothing was changed on the NAS."
+        exit 2
+    fi
+    # shellcheck source=lib/package_volume.sh
+    if ! source "$scriptpath/lib/package_volume.sh"; then
+        ding
+        echo -e "${Error}ERROR${Off} Failed to load $scriptpath/lib/package_volume.sh"
+        echo "Nothing was changed on the NAS."
+        exit 2
+    fi
+    if ! volume_require_tools || ! volume_check_target "$install_volume"; then
+        ding
+        echo -e "${Error}ERROR${Off} Packages can't be installed on $install_volume"
+        echo "It must be mounted read-write and listed by Package Center."
+        echo "Nothing was changed on the NAS."
+        exit 2
+    fi
+    echo "Packages that need installing will be installed on: $install_volume"
+    echo "Packages that are already the right version stay where they are."
+fi
 
 #------------------------------------------------------------------------------
 
@@ -435,19 +470,68 @@ package_uninstall(){
 package_install(){ 
     # $1 is package filename
     # $2 is package display name
-    # $3 is /volume2 etc
+    # $3 is package ID (CodecPack, VideoStation or MediaServer)
     [ "$trace" == "yes" ] && echo "${FUNCNAME[0]} called from ${FUNCNAME[1]}"
-    #/usr/syno/bin/synopkg install_from_server "$1" "$3" >/dev/null &
-    /usr/syno/bin/synopkg install "${workdir:?}/$1" "$3" >/dev/null &
-    pid=$!
-    if [[ $3 ]]; then
-        string="Installing ${Cyan}${2}${Off} on ${Cyan}$3${Off}"
+    local code
+    if [[ -n $install_volume ]]; then
+        volume_install_spk "${workdir:?}/$1" "${3:?}" "$install_volume" >/dev/null &
+        pid=$!
+        string="Installing ${Cyan}${2}${Off} on ${Cyan}$install_volume${Off}"
     else
+        /usr/syno/bin/synopkg install "${workdir:?}/$1" >/dev/null &
+        pid=$!
         string="Installing ${Cyan}${2}${Off}"
     fi
     progbar "$pid" "$string"
     wait "$pid"
-    progstatus "$?" "$string" "line ${LINENO}"
+    code="$?"
+    if [[ $code != "0" ]] && [[ -n $install_volume ]]; then
+        exitonerror="no"
+        progstatus "$code" "$string" "line ${LINENO}"
+        volume_install_failed "$2"
+        exit 1
+    fi
+    progstatus "$code" "$string" "line ${LINENO}"
+}
+
+pkg_name(){ 
+    # $1 is package ID
+    case "$1" in
+        CodecPack)    echo "Advanced Media Extensions" ;;
+        VideoStation) echo "Video Station" ;;
+        MediaServer)  echo "Media Server" ;;
+        *)            echo "$1" ;;
+    esac
+}
+
+volume_install_failed(){ 
+    # $1 is display name of the package that failed to install
+    # Say exactly what this run removed, and how to finish without --volume
+    local pkg
+    local removed
+    local rerun
+    removed="no"
+    echo ""
+    echo -e "${Error}ERROR${Off} $1 could not be installed on $install_volume"
+    for pkg in CodecPack VideoStation MediaServer; do
+        if [[ -n ${versions_before[$pkg]} ]] && ! check_pkg_installed "$pkg"; then
+            if [[ $removed == "no" ]]; then
+                echo "This run removed these packages and they are not installed now:"
+                removed="yes"
+            fi
+            echo "  - $(pkg_name "$pkg") ${versions_before[$pkg]}"
+        fi
+    done
+    if [[ $removed == "no" ]]; then
+        echo "This run did not remove any package."
+    fi
+    echo "$1 is not installed."
+    rerun="sudo bash $(printf '%q' "${scriptpath}/$scriptfile")"
+    if [[ -n $install_choice ]]; then
+        rerun="$rerun --install=$install_choice"
+    fi
+    echo "To install the packages on Package Center's default volume, run the script again without --volume:"
+    echo "  $rerun"
 }
 
 pkg_sha256(){ 
@@ -662,6 +746,35 @@ if [[ $no_ms != "yes" ]]; then
     fi
 fi
 
+# Ask DSM if each package can go on the --volume volume, before any change
+declare -A versions_before=()
+if [[ -n $install_volume ]]; then
+    for pkg in CodecPack VideoStation MediaServer; do
+        if check_pkg_installed "$pkg"; then
+            versions_before[$pkg]=$(/usr/syno/bin/synopkg version "$pkg")
+        fi
+    done
+    for pkg in CodecPack VideoStation MediaServer; do
+        case "$pkg" in
+            CodecPack)    [[ $need_ame == "yes" ]] || continue ;;
+            VideoStation) [[ $need_vs == "yes" ]] || continue ;;
+            MediaServer)  [[ $need_ms == "yes" ]] || continue ;;
+        esac
+        if [[ -n ${versions_before[$pkg]} ]]; then
+            # DSM may not answer for a package that is still installed
+            if ! volume_check_package "$pkg" "$install_volume" 2>/dev/null; then
+                echo "Note: DSM could not check $(pkg_name "$pkg") for $install_volume while it is installed."
+                echo "      It is checked again just before it is installed."
+            fi
+        elif ! volume_check_package "$pkg" "$install_volume"; then
+            ding
+            echo -e "${Error}ERROR${Off} DSM says $(pkg_name "$pkg") can't be installed on $install_volume"
+            echo "Nothing was changed on the NAS."
+            exit 2
+        fi
+    done
+fi
+
 # Download and check every package needed before changing anything
 if [[ $need_ame == "yes" ]]; then
     download_pkg CodecPack "3.1.0-3005" "CodecPack-${cputype}-3.1.0-3005.spk"
@@ -749,7 +862,7 @@ fi
 # CodecPack (Advanced Media Extensions)
 if ! check_pkg_installed CodecPack; then
     need_pkg_file "CodecPack-${cputype}-3.1.0-3005.spk"
-    package_install "CodecPack-${cputype}-3.1.0-3005.spk" "Advanced Media Extensions"
+    package_install "CodecPack-${cputype}-3.1.0-3005.spk" "Advanced Media Extensions" CodecPack
     package_stop CodecPack "Advanced Media Extensions"
     # Prevent package updating and "update available" messages
     echo "Preventing Advanced Media Extensions from auto updating"
@@ -766,7 +879,7 @@ if [[ $no_vs != "yes" ]]; then
     if ! check_pkg_installed VideoStation; then
         need_pkg_file "VideoStation-${cputype}-3.1.0-3153.spk"
         #package_install "VideoStation-${cputype}-3.1.1-3168.spk" "Video Station"
-        package_install "VideoStation-${cputype}-3.1.0-3153.spk" "Video Station"
+        package_install "VideoStation-${cputype}-3.1.0-3153.spk" "Video Station" VideoStation
         package_stop VideoStation "Video Station"
         # Prevent package updating and "update available" messages
         echo "Preventing Video Station from auto updating"
@@ -785,7 +898,7 @@ fi
 if [[ $no_ms != "yes" ]]; then
     if ! check_pkg_installed MediaServer; then
         need_pkg_file "MediaServer-${cputype}-2.0.5-3152.spk"
-        package_install "MediaServer-${cputype}-2.0.5-3152.spk" "Media Server"
+        package_install "MediaServer-${cputype}-2.0.5-3152.spk" "Media Server" MediaServer
         package_stop MediaServer "Media Server"
         # Prevent package updating and "update available" messages
         echo "Preventing Media Server from auto updating"
