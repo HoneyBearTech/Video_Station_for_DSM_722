@@ -9,25 +9,23 @@ What shipped is in the [pass map](pass-map.md); the reasons are in the
 - 2026-11-20: Renovate merges its own pull requests (#4).
 - 2026-11-27: Whole-repository review
   ([report](reports/2026-11-27-repo-review.md)).
+- 2026-11-27: Owner chose a maintained copy.
+- 2026-11-27: Script safety fixes, `v1.4.22-hbt.1` (#7): checked downloads,
+  a private download folder, failed downloads stop the script, everything is
+  downloaded first, and the self-updater is removed.
 
 ## Waiting on the owner
 
-- Decide whether this is a maintained copy or a plain mirror of the original
-  project. Most items below depend on it.
+- Run `v1.4.22-hbt.1` once on a real NAS, codecs only first
+  (`--install=onlyamc`). Check that downloads pass the certificate check and
+  that DSM installs from the private folder.
 
-## Next (if maintained)
+## Next
 
-- Script safety fixes, in one small change:
-  - turn the HTTPS certificate check back on;
-  - download into a private folder and never reuse an existing file;
-  - treat a failed or partial download as a failure;
-  - download everything before removing any package;
-  - keep the original options across a self-update.
-- Point the self-updater at this repository, or turn it off.
-- Split draft PR #3: the safety fixes first, and the new features (install
-  volumes, REST subtitles) after a test on a NAS.
-- Fix `how_to_run_from_scheduler.md` (`--install=`, not `install=`) and say
-  in the README that this is a modified copy.
+- Draft PR #3: rebase it onto these fixes and keep only its new features
+  (install volumes, REST subtitles), to land after a test on a NAS.
+- Fix `how_to_run_from_scheduler.md` (`--install=`, not `install=`).
+- Tag a first release of this copy, so the README can link to releases.
 - Make failures return a non-zero exit code; check settings-file edits and
   package start/stop timeouts.
 
@@ -36,7 +34,8 @@ What shipped is in the [pass map](pass-map.md); the reasons are in the
 - Add a security policy and turn on private vulnerability reporting; give bug
   reports somewhere to go (Issues are off).
 - Run the standard repository bootstrap (contribution guide, code of conduct,
-  OpenSSF badge, lint check on pull requests).
+  OpenSSF badge, and a check on pull requests that runs `shellcheck` and the
+  `tests/` suite).
 - Year workflow: pin `actions/checkout` by commit, add top-level
   `permissions`, skip the commit when nothing changed, and work with the
   branch rule (or remove the workflow).
