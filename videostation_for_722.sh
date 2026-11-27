@@ -506,26 +506,68 @@ pkg_name(){
 
 volume_install_failed(){ 
     # $1 is display name of the package that failed to install
-    # Say exactly what this run removed, and how to finish without --volume
+    # Re-read each package's state and only say what is confirmed,
+    # then say how to finish without --volume
     local pkg
-    local removed
+    local code
+    local version
+    local target
+    local missing
+    local uncertain
+    local changed
     local rerun
-    removed="no"
+    missing=()
+    uncertain="no"
+    changed="no"
     echo ""
     echo -e "${Error}ERROR${Off} $1 could not be installed on $install_volume"
+    echo "What DSM reports now:"
     for pkg in CodecPack VideoStation MediaServer; do
-        if [[ -n ${versions_before[$pkg]} ]] && ! check_pkg_installed "$pkg"; then
-            if [[ $removed == "no" ]]; then
-                echo "This run removed these packages and they are not installed now:"
-                removed="yes"
+        case "$pkg" in
+            CodecPack)    [[ $need_ame == "yes" ]] || [[ -n ${versions_before[$pkg]} ]] || continue ;;
+            VideoStation) [[ $need_vs == "yes" ]] || [[ -n ${versions_before[$pkg]} ]] || continue ;;
+            MediaServer)  [[ $need_ms == "yes" ]] || [[ -n ${versions_before[$pkg]} ]] || continue ;;
+        esac
+        /usr/syno/bin/synopkg status "$pkg" >/dev/null 2>&1
+        code="$?"
+        if [[ $code == "255" ]] || [[ $code == "4" ]]; then
+            if [[ -n ${versions_before[$pkg]} ]]; then
+                echo "  - $(pkg_name "$pkg"): not installed (was ${versions_before[$pkg]} when this run started)"
+                missing+=("$pkg")
+            else
+                echo "  - $(pkg_name "$pkg"): not installed"
             fi
-            echo "  - $(pkg_name "$pkg") ${versions_before[$pkg]}"
+        elif [[ $code == "0" ]] || [[ $code == "17" ]] || [[ $code == "3" ]] || [[ $code == "55" ]]; then
+            version=$(/usr/syno/bin/synopkg version "$pkg" 2>/dev/null)
+            if [[ -n ${versions_before[$pkg]} ]] && [[ $version != "${versions_before[$pkg]}" ]]; then
+                # Removed and installed again
+                changed="yes"
+            fi
+            target=$(volume_package_target "$pkg" 2>/dev/null)
+            if [[ $target == "$install_volume/@appstore/$pkg" ]]; then
+                echo "  - $(pkg_name "$pkg"): installed ($version) on $install_volume"
+            elif [[ -n $target ]]; then
+                echo "  - $(pkg_name "$pkg"): installed ($version) but not on $install_volume (it is in $target)"
+            else
+                echo "  - $(pkg_name "$pkg"): installed ($version) but not on $install_volume (where is not known)"
+            fi
+        else
+            echo "  - $(pkg_name "$pkg"): state uncertain (synopkg status $code) - check Package Center"
+            uncertain="yes"
         fi
     done
-    if [[ $removed == "no" ]]; then
+    if [[ ${#missing[@]} -gt "0" ]]; then
+        echo "This run removed:"
+        for pkg in "${missing[@]}"; do
+            echo "  - $(pkg_name "$pkg") ${versions_before[$pkg]}"
+        done
+    elif [[ $uncertain == "yes" ]]; then
+        echo "Check Package Center to see what this run changed."
+    elif [[ $changed == "no" ]]; then
         echo "This run did not remove any package."
+    else
+        echo "No package that was installed before this run is missing now."
     fi
-    echo "$1 is not installed."
     rerun="sudo bash $(printf '%q' "${scriptpath}/$scriptfile")"
     if [[ -n $install_choice ]]; then
         rerun="$rerun --install=$install_choice"
