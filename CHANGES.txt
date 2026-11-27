@@ -1,4 +1,4 @@
-Subtitle plugin (optional, separate from the install script)
+Unreleased - subtitle plugin (optional, separate from the install script)
 - Added an optional OpenSubtitles.com plugin for Video Station 3.1.0, with its own setup and restore script, scripts/install-subtitle-plugin.sh. See docs/subtitle-compatibility.md
 
 v1.4.22-hbt.1
