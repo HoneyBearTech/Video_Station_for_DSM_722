@@ -260,7 +260,7 @@ else
 fi
 echo "Using CPU type: $cputype"
 
-safe_to_source(){ 
+safe_to_source(){
     # $1 is a file or folder that root will read code from
     # Owned by the user running the script (root) and not group- or world-writable
     local mode
@@ -523,7 +523,7 @@ package_install(){
     progstatus "$code" "$string" "line ${LINENO}"
 }
 
-pkg_name(){ 
+pkg_name(){
     # $1 is package ID
     case "$1" in
         CodecPack)    echo "Advanced Media Extensions" ;;
@@ -533,7 +533,7 @@ pkg_name(){
     esac
 }
 
-volume_install_failed(){ 
+volume_install_failed(){
     # $1 is display name of the package that failed to install
     # Re-read each package's state and only say what is confirmed,
     # then say how to finish without --volume
