@@ -1,8 +1,10 @@
 """Run the complete installer against stand-in DSM commands."""
 
+import json
+import re
 import unittest
 
-from harness import run_installer
+from harness import needs_jq, run_installer
 
 OLD_VERSIONS = {
     "CodecPack": {"version": "4.0.0-4025", "running": True},
@@ -161,6 +163,145 @@ class InstallationFlowTests(unittest.TestCase):
         self.assertEqual(run.state, {})
         self.assertFalse(run.backup)
         self.assertFalse(any(row[0] in ("synopkg", "synosetkeyvalue", "curl") for row in run.operations))
+
+
+PRIVATE_SPK = re.compile(r"/tmp/vs722\.[^/]+/(CodecPack|VideoStation|MediaServer)-x86_64-[0-9.-]+\.spk$")
+
+
+def installed_package(call):
+    """Package ID of a web API install call, from its file name."""
+    return json.loads(call["path"]).rsplit("/", 1)[1].split("-", 1)[0]
+
+
+class VolumeInstallTests(unittest.TestCase):
+    """--volume=/volumeN, with the real lib/package_volume.sh and a stand-in synowebapi."""
+
+    def assert_nothing_changed(self, run, installed=None):
+        self.assertEqual(run.returncode, 2, run.output)
+        self.assertIn("Nothing was changed on the NAS.", run.output)
+        self.assertEqual(run.curl_calls(), [])
+        self.assertEqual(run.mutations(), [])
+        self.assertFalse(run.backup)
+        self.assertEqual(run.state, installed or {})
+        self.assertEqual(run.downloads_left, [])
+
+    @needs_jq
+    def test_selected_volume_gets_the_checked_file_from_the_private_folder(self):
+        run = run_installer("onlyamc", extra_args=("--volume=/volume2",))
+        self.assertEqual(run.returncode, 0, run.output)
+        installs = run.webapi_calls("install")
+        self.assertEqual(len(installs), 1)
+        self.assertEqual(json.loads(installs[0]["volume_path"]), "/volume2")
+        self.assertRegex(json.loads(installs[0]["path"]), PRIVATE_SPK)
+        self.assertEqual(installs[0]["check_codesign"], "true")
+        self.assertEqual(installs[0]["force"], "false")
+        # DSM's own installer is not used, and Package Center's default is never set.
+        self.assertFalse(any(row[:2] == ["synopkg", "install"] for row in run.operations))
+        self.assertEqual([call["method"] for call in run.webapi_calls()],
+                         ["get", "check", "get", "check", "install"])
+        self.assertEqual(run.state["CodecPack"], {"version": "30.1.0-3005", "running": True})
+        self.assertIn("Installing Advanced Media Extensions on /volume2", run.output)
+
+    @needs_jq
+    def test_every_package_is_checked_before_downloading(self):
+        run = run_installer("all", extra_args=("--volume=/volume2",))
+        self.assertEqual(run.returncode, 0, run.output)
+        checks = [index for index, row in enumerate(run.operations)
+                  if row[0] == "synowebapi" and "method=check" in row]
+        curls = [index for index, row in enumerate(run.operations) if row[0] == "curl"]
+        self.assertEqual(len(curls), 3)
+        self.assertEqual(len(checks), 6)
+        self.assertLess(checks[2], min(curls))
+        self.assertLess(max(curls), min(run.mutations()))
+        self.assertEqual(sorted(installed_package(call) for call in run.webapi_calls("install")),
+                         ["CodecPack", "MediaServer", "VideoStation"])
+        self.assertEqual([json.loads(call["id"]) for call in run.webapi_calls("check")],
+                         ["CodecPack", "VideoStation", "MediaServer"] * 2)
+        for call in run.webapi_calls("install"):
+            self.assertRegex(json.loads(call["path"]), PRIVATE_SPK)
+        self.assertEqual(set(run.state), {"CodecPack", "VideoStation", "MediaServer"})
+
+    @needs_jq
+    def test_bad_volume_stops_before_any_download_or_change(self):
+        cases = {
+            "not mounted": {"mounts": ["/volume1"]},
+            "read-only": {"mounts": [("/volume2", "ro")]},
+            "not listed by Package Center": {"webapi": {"volumes": ["/volume1"]}},
+            "DSM refuses the package": {"webapi": {"refuse_check": ["VideoStation"]}},
+        }
+        for name, options in cases.items():
+            with self.subTest(case=name):
+                run = run_installer("all", OLD_VERSIONS if name == "read-only" else None,
+                                    extra_args=("--volume=/volume2",), **options)
+                self.assert_nothing_changed(run, OLD_VERSIONS if name == "read-only" else None)
+
+    def test_missing_tools_or_lib_stop_before_any_download_or_change(self):
+        cases = {
+            "no jq": ({"lib_edits": (("command -v jq", "command -v jq-not-installed"),)}, "requires jq"),
+            "no lib folder": ({"lib": False}, "lib/package_volume.sh"),
+        }
+        for name, (options, message) in cases.items():
+            with self.subTest(case=name):
+                run = run_installer("all", OLD_VERSIONS, extra_args=("--volume=/volume2",), **options)
+                self.assert_nothing_changed(run, OLD_VERSIONS)
+                self.assertIn(message, run.output)
+
+    @needs_jq
+    def test_installed_package_dsm_cannot_check_is_noted_not_failed(self):
+        run = run_installer("onlyamc", {"CodecPack": {"version": "4.0.0-4025", "running": True}},
+                            extra_args=("--volume=/volume2",))
+        self.assertEqual(run.returncode, 0, run.output)
+        self.assertIn("DSM could not check Advanced Media Extensions for /volume2 while it is installed",
+                      run.output)
+        self.assertEqual(run.state["CodecPack"]["version"], "30.1.0-3005")
+
+    @needs_jq
+    def test_late_install_failure_says_what_was_removed_and_how_to_rerun(self):
+        run = run_installer("all", OLD_VERSIONS, extra_args=("--volume=/volume2",),
+                            webapi={"fail_install": ["VideoStation"]})
+        self.assertNotEqual(run.returncode, 0, run.output)
+        self.assertEqual(run.returncode, 1, run.output)
+        self.assertIn("Video Station could not be installed on /volume2", run.output)
+        self.assertIn("This run removed these packages and they are not installed now:", run.output)
+        self.assertIn("  - Video Station 30.1.1-3168", run.output)
+        self.assertIn("  - Media Server 20.1.0-3304", run.output)
+        self.assertNotIn("  - Advanced Media Extensions", run.output)
+        self.assertIn("run the script again without --volume", run.output)
+        rerun = run.output.split("without --volume:\n", 1)[1].splitlines()[0]
+        self.assertRegex(rerun, r"^  sudo bash /\S+/installer\.sh --install=all$")
+        self.assertNotIn("VideoStation", run.state)
+        self.assertEqual(run.downloads_left, [])
+
+    @needs_jq
+    def test_late_install_failure_with_nothing_removed_says_so(self):
+        run = run_installer("onlyamc", extra_args=("--volume=/volume2",),
+                            webapi={"fail_install": ["CodecPack"]})
+        self.assertEqual(run.returncode, 1, run.output)
+        self.assertIn("This run did not remove any package.", run.output)
+        self.assertIn("Advanced Media Extensions is not installed.", run.output)
+
+    @needs_jq
+    def test_packages_already_right_stay_where_they_are(self):
+        installed = {"CodecPack": {"version": "30.1.0-3005", "running": True},
+                     "VideoStation": {"version": "30.1.0-3153", "running": True}}
+        run = run_installer("all", installed, extra_args=("--volume=/volume2",))
+        self.assertEqual(run.returncode, 0, run.output)
+        self.assertEqual([installed_package(call) for call in run.webapi_calls("install")], ["MediaServer"])
+        self.assertFalse(any(row[:2] == ["synopkg", "uninstall"] for row in run.operations))
+
+    def test_normal_run_without_volume_is_unchanged(self):
+        for lib in (True, False):
+            with self.subTest(lib=lib):
+                run = run_installer("all", OLD_VERSIONS, lib=lib)
+                self.assertEqual(run.returncode, 0, run.output)
+                self.assertEqual([row for row in run.operations if row[0] == "synowebapi"], [])
+                installs = [row for row in run.operations if row[:2] == ["synopkg", "install"]]
+                self.assertEqual(len(installs), 3)
+                for row in installs:
+                    self.assertEqual(len(row), 3, "synopkg install gets only the package file")
+                    self.assertRegex(row[2], PRIVATE_SPK)
+                self.assertNotIn(" on /volume", run.output)
+                self.assertNotIn("volume", run.output.lower())
 
 
 if __name__ == "__main__":
