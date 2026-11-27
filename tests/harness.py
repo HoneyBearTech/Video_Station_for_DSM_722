@@ -5,6 +5,15 @@ uname) are put first on PATH, and the script's DSM paths are rewritten to
 point inside a temporary folder, so nothing outside it is touched and no
 network is used. Each stand-in call is appended to a JSON-lines log, and the
 simulated package state is kept in a JSON file.
+
+The script needs bash 4 or later, and runs as if it were root, so run the
+tests in a throwaway container with no network, from the repository root:
+
+  docker run --rm --network none -e PYTHONDONTWRITEBYTECODE=1 -v "$PWD:/w:ro" -w /w \
+      python:3.13-slim python3 -m unittest discover -s tests -v
+
+Outside a container the installer runs are skipped, unless VS722_TESTS_ON_HOST=1
+is set.
 """
 
 import hashlib
@@ -15,6 +24,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "videostation_for_722.sh"
@@ -28,6 +38,18 @@ ALL_FILES = [f"{name}-{cpu}-{version}.spk" for name, version in PACKAGES for cpu
 HASH_ENTRY = re.compile(r'^( +)(\S+\.spk)\)\n +echo "([0-9a-f]{64})" ;;\n', re.MULTILINE)
 
 HOSTS = ("global.synologydownload.com", "global.download.synology.com", "cndl.synology.cn")
+
+
+def in_container():
+    return Path("/.dockerenv").exists() or Path("/run/.containerenv").exists()
+
+
+def require_container():
+    """Skip the calling test unless it runs in a container (or the user opts in)."""
+    if not in_container() and os.environ.get("VS722_TESTS_ON_HOST") != "1":
+        raise unittest.SkipTest(
+            "installer runs only inside a container (no /.dockerenv or /run/.containerenv); "
+            "set VS722_TESTS_ON_HOST=1 to run them here anyway")
 
 
 def genuine(filename):
@@ -168,6 +190,7 @@ class Run:
 def run_installer(choice="all", installed=None, arch="x86_64", curl=None, plant=None,
                   drop_hashes=(), source_edits=()):
     """Run the whole installer with --install=<choice> and return a Run."""
+    require_container()
     with tempfile.TemporaryDirectory(prefix="vs722-test-") as directory:
         folder = Path(directory)
         binary = folder / "bin"
