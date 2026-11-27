@@ -582,6 +582,15 @@ download_pkg(){
     exit 3
 }
 
+need_pkg_file(){ 
+    # $1 is the package file that must already be downloaded and checked
+    if [[ ! -f "${workdir:?}/${1:?}" ]]; then
+        ding
+        echo -e "${Error}ERROR${Off} ${1} was not downloaded before changes were made!"
+        exit 1
+    fi
+}
+
 
 # Only install the packages the user wants
 echo ""
@@ -626,7 +635,7 @@ else
 fi
 
 
-# Work out which packages are needed (this does not change anything)
+# Work out which packages may be needed (this does not change anything)
 need_ame=""
 need_vs=""
 need_ms=""
@@ -638,11 +647,17 @@ if [[ $no_vs != "yes" ]]; then
     vs_version=$(/usr/syno/bin/synopkg version VideoStation)
     if ! check_pkg_installed VideoStation || [[ ${vs_version} != "30.1.0-3153" ]]; then
         need_vs="yes"
+    elif [[ ${ame_version:0:1} -gt "3" ]]; then
+        # Uninstalling AME v4 could also remove Video Station
+        need_vs="yes"
     fi
 fi
 if [[ $no_ms != "yes" ]]; then
     ms_version=$(/usr/syno/bin/synopkg version MediaServer)
     if ! check_pkg_installed MediaServer || [[ ${ms_version} != "20.0.5-3152" ]]; then
+        need_ms="yes"
+    elif [[ ${ame_version:0:1} -gt "3" ]]; then
+        # Uninstalling AME v4 could also remove Media Server
         need_ms="yes"
     fi
 fi
@@ -702,8 +717,38 @@ if [[ $no_ms != "yes" ]]; then
     fi
 fi
 
+# Check the uninstalls worked before installing anything
+if check_pkg_installed CodecPack; then
+    ame_version=$(/usr/syno/bin/synopkg version CodecPack)
+    if [[ ${ame_version:0:1} -gt "3" ]]; then
+        ding
+        echo -e "${Error}ERROR${Off} Uninstalling Advanced Media Extensions $ame_version didn't work!"
+        echo "Stopping so nothing is installed over it."
+        exit 1
+    fi
+fi
+if [[ $no_vs != "yes" ]] && check_pkg_installed VideoStation; then
+    vs_version=$(/usr/syno/bin/synopkg version VideoStation)
+    if [[ ${vs_version} != "30.1.0-3153" ]]; then
+        ding
+        echo -e "${Error}ERROR${Off} Uninstalling Video Station $vs_version didn't work!"
+        echo "Stopping so nothing is installed over it."
+        exit 1
+    fi
+fi
+if [[ $no_ms != "yes" ]] && check_pkg_installed MediaServer; then
+    ms_version=$(/usr/syno/bin/synopkg version MediaServer)
+    if [[ ${ms_version} != "20.0.5-3152" ]]; then
+        ding
+        echo -e "${Error}ERROR${Off} Uninstalling Media Server $ms_version didn't work!"
+        echo "Stopping so nothing is installed over it."
+        exit 1
+    fi
+fi
+
 # CodecPack (Advanced Media Extensions)
-if [[ $need_ame == "yes" ]]; then
+if ! check_pkg_installed CodecPack; then
+    need_pkg_file "CodecPack-${cputype}-3.1.0-3005.spk"
     package_install "CodecPack-${cputype}-3.1.0-3005.spk" "Advanced Media Extensions"
     package_stop CodecPack "Advanced Media Extensions"
     # Prevent package updating and "update available" messages
@@ -712,12 +757,14 @@ if [[ $need_ame == "yes" ]]; then
     package_start CodecPack "Advanced Media Extensions"
     rm -f "$workdir/CodecPack-${cputype}-3.1.0-3005.spk"
 else
+    ame_version=$(/usr/syno/bin/synopkg version CodecPack)
     echo -e "\n${Cyan}Advanced Media Extensions${Off} $ame_version already installed"
 fi
 
 # VideoStation
 if [[ $no_vs != "yes" ]]; then
-    if [[ $need_vs == "yes" ]]; then
+    if ! check_pkg_installed VideoStation; then
+        need_pkg_file "VideoStation-${cputype}-3.1.0-3153.spk"
         #package_install "VideoStation-${cputype}-3.1.1-3168.spk" "Video Station"
         package_install "VideoStation-${cputype}-3.1.0-3153.spk" "Video Station"
         package_stop VideoStation "Video Station"
@@ -729,13 +776,15 @@ if [[ $no_vs != "yes" ]]; then
         #rm -f "$workdir/VideoStation-${cputype}-3.1.0-3168.spk"
         rm -f "$workdir/VideoStation-${cputype}-3.1.0-3153.spk"
     else
+        vs_version=$(/usr/syno/bin/synopkg version VideoStation)
         echo -e "\n${Cyan}Video Station${Off} $vs_version already installed"
     fi
 fi
 
 # MediaServer
 if [[ $no_ms != "yes" ]]; then
-    if [[ $need_ms == "yes" ]]; then
+    if ! check_pkg_installed MediaServer; then
+        need_pkg_file "MediaServer-${cputype}-2.0.5-3152.spk"
         package_install "MediaServer-${cputype}-2.0.5-3152.spk" "Media Server"
         package_stop MediaServer "Media Server"
         # Prevent package updating and "update available" messages
@@ -744,6 +793,7 @@ if [[ $no_ms != "yes" ]]; then
         package_start MediaServer "Media Server"
         rm -f "$workdir/MediaServer-${cputype}-2.0.5-3152.spk"
     else
+        ms_version=$(/usr/syno/bin/synopkg version MediaServer)
         echo -e "\n${Cyan}Media Server${Off} $ms_version already installed"
     fi
 fi
