@@ -24,6 +24,19 @@ Without `--volume`, the script works exactly as before: DSM's
   script checks for all of them rather than assuming.
 - A volume path of the form `/volume1`, `/volume2` and so on. Anything else
   stops the script with exit code 2 before it does anything.
+- The `lib` folder and `lib/package_volume.sh` must be owned by root, must not
+  be links, and must not be writable by group or others. The script runs this
+  file as root, so anyone who could change it could run commands as root. If
+  this isn't the case the script stops, changes nothing, and prints the
+  commands to fix it:
+
+  ```sh
+  sudo chown -R root:root /volume1/scripts/lib
+  sudo chmod -R go-w /volume1/scripts/lib
+  ```
+
+  Files copied with File Station into a shared folder usually belong to your
+  own user, so you'll normally need to run these once.
 
 ## What it does
 
@@ -34,10 +47,15 @@ Without `--volume`, the script works exactly as before: DSM's
 2. Still before downloading, it asks DSM (`SYNO.Core.Package.Installation`,
    method `check`) whether each package it needs to install can go on that
    volume. This doesn't change anything.
-   - For a package that isn't installed, a "no" stops the script.
+   - If DSM answers "no" for any package (the volume is occupied, or DSM
+     doesn't offer that volume for the package), the script stops, saying DSM
+     refused that package on that volume. This applies to installed packages
+     too.
+   - If DSM can't answer (the call fails, times out or the reply can't be
+     understood) for a package that isn't installed, the script stops.
    - DSM may not answer for a package that is still installed (one that is
-     about to be replaced). The script then prints a note and carries on; that
-     package is checked again just before it is installed.
+     about to be replaced). Only then does the script print a note and carry
+     on; that package is checked again just before it is installed.
 3. It downloads and checks every package as usual: HTTPS with the certificate
    checked, a SHA-256 checksum for every file, into a private folder only root
    can read.
@@ -47,7 +65,7 @@ Without `--volume`, the script works exactly as before: DSM's
 5. After each install it waits up to 30 seconds for DSM to show the package as
    installed in `/volumeN/@appstore/<package>`. Only then does it carry on.
 
-If any of the checks in steps 1 and 2 fails, the script says
+If any of the checks above, or the `lib` folder check, fails, the script says
 **"Nothing was changed on the NAS."** and exits with code 2.
 
 It never changes Package Center's default volume, keeps DSM's signature check
@@ -69,8 +87,12 @@ because DSM may not answer it for a package that is still installed.
 
 If this happens, the script:
 
-- names every package this run removed that is not installed now, with the
-  version it had;
+- asks DSM again about each package and says, for each one, only what DSM
+  reports now: not installed (with the version it had when the run started),
+  installed on the chosen volume, installed but somewhere else (and where, if
+  DSM says), or "state uncertain - check Package Center";
+- lists the packages this run removed that are not installed now. It only
+  says "This run did not remove any package." when DSM confirms that;
 - prints the command to run again **without** `--volume`, which installs
   the packages on Package Center's default volume instead;
 - exits with code 1.
@@ -79,9 +101,11 @@ For example:
 
 ```
 ERROR Video Station could not be installed on /volume2
-This run removed these packages and they are not installed now:
+What DSM reports now:
+  - Advanced Media Extensions: installed (30.1.0-3005) on /volume2
+  - Video Station: not installed (was 30.1.1-3168 when this run started)
+This run removed:
   - Video Station 30.1.1-3168
-Video Station is not installed.
 To install the packages on Package Center's default volume, run the script again without --volume:
   sudo bash /volume1/scripts/videostation_for_722.sh --install=all
 ```
@@ -112,8 +136,10 @@ as a failure.
 
 The tests use stand-ins for the web service, `/proc/mounts`, `synopkg` and the
 package install folder. They cover bad, missing, read-only and unlisted volumes,
-a "no" from the package check, bad replies, the file and volume sent to DSM,
-the late-failure message, and a normal run without `--volume`. The tests that
+a "no" from the package check (for installed and not-installed packages), a
+check DSM can't answer, bad replies, an unsafe `lib` folder, the file and
+volume sent to DSM, the late-failure message (including a package that lands
+on another volume), and a normal run without `--volume`. The tests that
 need `jq` are skipped without it; see `tests/harness.py` for the full test
 command.
 
@@ -129,9 +155,12 @@ Back up first, and note the model, CPU and DSM version.
 3. All three packages with `--volume=/volume2`, a reboot, and playing a video
    (including HEVC).
 4. Replacing the v4 codec pack (Advanced Media Extensions 4.x) with
-   `--volume=/volume2`. Note whether the early check answered for it or printed
-   the note.
-5. A missing, read-only and unlisted volume each stop with "Nothing was
-   changed on the NAS."
+   `--volume=/volume2`. Note whether the early check answered for it, printed
+   the note, or refused it. If DSM reports an installed package as "occupied",
+   the script will stop there and `--volume` can't replace installed packages
+   until that is handled.
+5. A missing, read-only and unlisted volume, and a `lib` folder not owned by
+   root, each stop with "Nothing was changed on the NAS." Check that the
+   `chown`/`chmod` fix the script prints works on a shared folder.
 6. A rerun, and a run from a scheduled task.
 7. Package Center's default volume is unchanged afterwards.

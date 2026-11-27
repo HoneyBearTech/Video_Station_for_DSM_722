@@ -74,7 +74,7 @@ A mistyped option or an extra word stops the script with exit code 2 before it d
 
 ### Installing on a different volume
 
-`--volume=/volume2` installs the packages on volume 2 instead of Package Center's default volume. Keep the `lib` folder in the same folder as the script.
+`--volume=/volume2` installs the packages on volume 2 instead of Package Center's default volume. Keep the `lib` folder in the same folder as the script. It must be owned by root and not writable by others (the script tells you how to fix this if it isn't).
 
 - The volume is checked before anything is downloaded or changed. If it can't be used, the script stops and says "Nothing was changed on the NAS."
 - Packages that are already the right version are not moved, so your packages can end up on different volumes.

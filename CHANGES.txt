@@ -3,6 +3,7 @@ v1.4.22-hbt.2
   - Checks the volume is mounted read-write and listed by Package Center, and asks DSM if each package can go there, before downloading or changing anything.
   - If installing on the volume fails after the old package was removed, says which packages were removed and how to run the script again without `--volume`.
   - Packages that are already the right version stay on their current volume.
+  - The lib folder must be owned by root and not writable by group or others, because it runs as root.
 - Changed to stop with exit code 2 for a mistyped option or an extra argument.
 - Bug fix for `-t, --trace` option which stopped the script instead of working.
 - Removed the `--log`, `--debug` and `--autoupdate` options which did nothing.
