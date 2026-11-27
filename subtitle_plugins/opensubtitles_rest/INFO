@@ -1,0 +1,9 @@
+{
+  "id": "com.synology.OpenSubtitles",
+  "title": "OpenSubtitles",
+  "description": "REST subtitle support for Video Station 3.1.0",
+  "version": 1.1,
+  "site": "https://www.opensubtitles.com/",
+  "entry_file": "subtitle.php",
+  "category": "subtitle"
+}
