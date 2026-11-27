@@ -8,6 +8,9 @@
 
 The Video Station icon above is Copyright © 2004-2026 [Synology Inc.](https://kb.synology.com/en-br/DSM/help/DSM/Home/about?version=7)
 
+> **This copy (v1.4.22-hbt.1)** has safety changes: it checks the HTTPS certificate and a SHA-256 checksum for every package it downloads, uses a private download folder, and downloads everything before it changes anything.<br>
+> It has no self-updater. To update, download a new copy from https://github.com/HoneyBearTech/Video_Station_for_DSM_722
+
 ### Description
 
 Script to install Video Station in DSM 7.2.2, 7.3, 7.3.1, 7.3.2 and 7.4
