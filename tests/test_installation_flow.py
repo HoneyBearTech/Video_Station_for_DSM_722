@@ -276,13 +276,19 @@ class VolumeInstallTests(unittest.TestCase):
             "world-writable folder": chmod(".", 0o757),
             "file owned by another user": chown,
             "file is a link": link,
+            "group-writable script folder": lambda folder: folder.parent.chmod(0o775),
+            "world-writable script folder": lambda folder: folder.parent.chmod(0o757),
         }
         for name, setup in cases.items():
             with self.subTest(case=name):
                 run = run_installer("all", OLD_VERSIONS, extra_args=("--volume=/volume2",), lib_setup=setup)
                 self.assert_nothing_changed(run, OLD_VERSIONS)
-                self.assertIn("won't load", run.output)
+                self.assertIn("won't load lib/ because of", run.output)
                 self.assertIn("could run commands as root", run.output)
+                if "script folder" in name:
+                    # The script's own folder is named, with a fix that isn't recursive.
+                    self.assertRegex(run.output, r"because of /tmp/vs722-test-[^/\s]+\n")
+                    self.assertIn("  sudo chmod go-w ", run.output)
                 self.assertEqual([row for row in run.operations if row[0] == "synowebapi"], [])
 
     @needs_jq
@@ -302,10 +308,12 @@ class VolumeInstallTests(unittest.TestCase):
         self.assertEqual(run.returncode, 1, run.output)
         self.assertIn("Video Station could not be installed on /volume2", run.output)
         self.assertIn("  - Advanced Media Extensions: installed (30.1.0-3005) on /volume2", run.output)
-        self.assertIn("  - Video Station: not installed (was 30.1.1-3168 when this run started)", run.output)
-        self.assertIn("  - Media Server: not installed (was 20.1.0-3304 when this run started)", run.output)
-        removed = run.output.split("This run removed:\n", 1)[1].split("To install", 1)[0]
-        self.assertEqual(removed.splitlines(), ["  - Video Station 30.1.1-3168", "  - Media Server 20.1.0-3304"])
+        self.assertIn("  - Video Station: not installed\n", run.output)
+        self.assertIn("  - Media Server: not installed\n", run.output)
+        removed = run.output.split("This run removed (what is installed now is listed above):\n", 1)[1]
+        removed = removed.split("To install", 1)[0]
+        self.assertEqual(removed.splitlines(), ["  - Advanced Media Extensions 4.0.0-4025",
+                                                "  - Video Station 30.1.1-3168", "  - Media Server 20.1.0-3304"])
         self.assertNotIn("did not remove", run.output)
         self.assertIn("run the script again without --volume", run.output)
         rerun = run.output.split("without --volume:\n", 1)[1].splitlines()[0]
@@ -321,6 +329,31 @@ class VolumeInstallTests(unittest.TestCase):
         self.assertIn("This run did not remove any package.", run.output)
         self.assertIn("  - Advanced Media Extensions: not installed\n", run.output)
         self.assertIn("run the script again without --volume", run.output)
+
+    @needs_jq
+    def test_removal_is_reported_even_when_the_same_version_comes_back(self):
+        # 3.1.0-3153 without the script's version rewrite is removed and installed
+        # again at the same version, but on the wrong volume.
+        installed = {"CodecPack": {"version": "30.1.0-3005", "running": True},
+                     "VideoStation": {"version": "3.1.0-3153", "running": True}}
+        run = run_installer("noms", installed, extra_args=("--volume=/volume2",),
+                            webapi={"install_elsewhere": {"VideoStation": "/volume1"}})
+        self.assertEqual(run.returncode, 1, run.output)
+        self.assertIn("  - Video Station: installed (3.1.0-3153) but not on /volume2 "
+                      "(it is in /volume1/@appstore/VideoStation)", run.output)
+        removed = run.output.split("This run removed (what is installed now is listed above):\n", 1)[1]
+        self.assertEqual(removed.split("To install", 1)[0].splitlines(), ["  - Video Station 3.1.0-3153"])
+        self.assertNotIn("did not remove", run.output)
+
+    @needs_jq
+    def test_install_with_no_location_says_location_unknown(self):
+        run = run_installer("onlyamc", extra_args=("--volume=/volume2",),
+                            webapi={"no_target": ["CodecPack"]})
+        self.assertEqual(run.returncode, 1, run.output)
+        self.assertIn("  - Advanced Media Extensions: installed (3.1.0-3005), location unknown - "
+                      "check Package Center\n", run.output)
+        self.assertNotIn("but not on /volume2", run.output)
+        self.assertIn("This run did not remove any package.", run.output)
 
     @needs_jq
     def test_install_that_lands_on_another_volume_says_where(self):

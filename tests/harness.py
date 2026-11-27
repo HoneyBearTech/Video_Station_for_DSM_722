@@ -151,7 +151,9 @@ elif name == "synowebapi":
     #   "check_installed": true to answer the pre-check for installed packages,
     #   "fail_install": [<pkg>, ...] the install call fails,
     #   "install_elsewhere": {<pkg>: "/volumeN"} the install reports success but
-    #     the package lands on that volume instead}
+    #     the package lands on that volume instead,
+    #   "no_target": [<pkg>, ...] the install reports success but leaves no
+    #     /var/packages/<pkg>/target link}
     web = json.loads(os.environ.get("MOCK_WEBAPI", "{}"))
     fields = dict(arg.split("=", 1) for arg in args if "=" in arg)
     api, method = fields.get("api"), fields.get("method")
@@ -196,8 +198,9 @@ elif name == "synowebapi":
             target.parent.mkdir(parents=True, exist_ok=True)
             if target.is_symlink():
                 target.unlink()
-            landed = web.get("install_elsewhere", {}).get(package, volume)
-            target.symlink_to(landed + "/@appstore/" + package)
+            if package not in web.get("no_target", []):
+                landed = web.get("install_elsewhere", {}).get(package, volume)
+                target.symlink_to(landed + "/@appstore/" + package)
             reply({"packageName": package})
     else:
         raise SystemExit("Unexpected web API call")
