@@ -263,10 +263,17 @@ cleanup(){
     exit "${arg1}"
 }
 
+workdir=""
 trap cleanup EXIT
 
 # Private download folder for this run (only root can read it)
-workdir=$(mktemp -d /tmp/vs722.XXXXXX) || exit
+if ! workdir=$(mktemp -d /tmp/vs722.XXXXXX); then
+    workdir=""
+    ding
+    echo -e "${Error}ERROR${Off} Failed to create the private download folder in /tmp!"
+    echo "Nothing was changed on the NAS."
+    exit 1
+fi
 
 progbar(){ 
     # $1 is pid of process
