@@ -1,12 +1,14 @@
 # <img src="images/VideoStation_64.png" width="40"> Video Station for DSM 7.2.2, 7.3.x and 7.4.x
 
-<a href="https://github.com/007revad/Video_Station_for_DSM_722/releases"><img src="https://img.shields.io/github/release/007revad/Video_Station_for_DSM_722.svg"></a>
 ![Badge](https://hitscounter.dev/api/hit?url=https%3A%2F%2Fgithub.com%2F007revad%2FVideo_Station_for_DSM_722&label=Visitors&icon=github&color=%23198754&message=&style=flat&tz=Australia%2FSydney)
 [![Donate](https://img.shields.io/badge/Donate-PayPal-green.svg)](https://www.paypal.com/paypalme/007revad)
 [![](https://img.shields.io/static/v1?label=Sponsor&message=%E2%9D%A4&logo=GitHub&color=%23fe8e86)](https://github.com/sponsors/007revad)
 <!-- [![committers.top badge](https://user-badge.committers.top/australia/007revad.svg)](https://user-badge.committers.top/australia/007revad) -->
 
 The Video Station icon above is Copyright © 2004-2026 [Synology Inc.](https://kb.synology.com/en-br/DSM/help/DSM/Home/about?version=7)
+
+> **This copy (v1.4.22-hbt.1)** has safety changes: it checks the HTTPS certificate and a SHA-256 checksum for every package it downloads, uses a private download folder, and downloads everything before it changes anything.<br>
+> It has no self-updater. To update, download a new copy from https://github.com/HoneyBearTech/Video_Station_for_DSM_722
 
 ### Description
 
@@ -38,7 +40,7 @@ Now also installs Media Server 2.0.5-3152 which supports video and audio convers
 
 ### Download the script
 
-1. Download the latest version _Source code (zip)_ from https://github.com/007revad/Video_Station_for_DSM_722/releases
+1. Download the latest version from https://github.com/HoneyBearTech/Video_Station_for_DSM_722 with the green _Code_ button > _Download ZIP_ (or use https://github.com/HoneyBearTech/Video_Station_for_DSM_722/archive/refs/heads/main.zip)
 2. Save the download zip file to a folder on the Synology.
 3. Unzip the zip file.
 
@@ -65,7 +67,7 @@ Options:
 
 ### To run the script via task scheduler
 
-See [How to run from task scheduler](https://github.com/007revad/Video_Station_for_DSM_722/blob/main/how_to_run_from_scheduler.md)
+See [How to run from task scheduler](https://github.com/HoneyBearTech/Video_Station_for_DSM_722/blob/main/how_to_run_from_scheduler.md)
 
 ### To run the script via SSH
 
@@ -85,7 +87,7 @@ Enable HEVC decoding:
 1. Open Package Center > Installed.
 2. Click Advanced Media Extensions.
 3. Click on Open.
-4. You may need to [Sign in to your Synology account](https://github.com/007revad/Video_Station_for_DSM_722/blob/main/syno_account_sign_in.md)
+4. You may need to [Sign in to your Synology account](https://github.com/HoneyBearTech/Video_Station_for_DSM_722/blob/main/syno_account_sign_in.md)
 5. Click on Install then OK.
 
 <p align="center"><img src="/images/enable_hevc.png"></p>

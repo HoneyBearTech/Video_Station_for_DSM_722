@@ -28,10 +28,9 @@
 #   or add OpenSubtitle changes from 3.1.1-3168 to 3.1.0-3153
 #------------------------------------------------------------------------------
 
-scriptver="v1.4.22"
+scriptver="v1.4.22-hbt.1"
 script=Video_Station_for_DSM_722
-repo="007revad/Video_Station_for_DSM_722"
-scriptname=videostation_for_722
+repo="HoneyBearTech/Video_Station_for_DSM_722"
 
 ding(){ 
     printf \\a
@@ -211,20 +210,6 @@ fi
 
 
 #------------------------------------------------------------------------------
-# Check latest release with GitHub API
-
-# Save options used
-args=("$@")
-
-# Get latest release info
-# Curl timeout options:
-# https://unix.stackexchange.com/questions/94604/does-curl-have-a-timeout
-release=$(curl --silent --connect-timeout 30 \
-    "https://api.github.com/repos/$repo/releases/latest")
-
-# Release version
-tag=$(echo "$release" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
-shorttag="${tag:1}"
 
 # Get script location
 # https://stackoverflow.com/questions/59895/
@@ -239,125 +224,6 @@ done
 scriptpath=$( cd -P "$( dirname "$source" )" >/dev/null 2>&1 && pwd )
 scriptfile=$( basename -- "$source" )
 echo "Running from: ${scriptpath}/$scriptfile"
-
-#echo "Script location: $scriptpath"  # debug
-#echo "Source: $source"               # debug
-#echo "Script filename: $scriptfile"  # debug
-
-#echo "tag: $tag"              # debug
-#echo "scriptver: $scriptver"  # debug
-
-
-cleanup_tmp(){ 
-    # Delete downloaded .tar.gz file
-    if [[ -f "/tmp/$script-$shorttag.tar.gz" ]]; then
-        if ! rm "/tmp/$script-$shorttag.tar.gz"; then
-            echo -e "${Error}ERROR${Off} Failed to delete"\
-                "downloaded /tmp/$script-$shorttag.tar.gz!" >&2
-        fi
-    fi
-
-    # Delete extracted tmp files
-    if [[ -d "/tmp/$script-$shorttag" ]]; then
-        if ! rm -r "/tmp/$script-$shorttag"; then
-            echo -e "${Error}ERROR${Off} Failed to delete"\
-                "downloaded /tmp/$script-$shorttag!" >&2
-        fi
-    fi
-}
-
-
-if ! printf "%s\n%s\n" "$tag" "$scriptver" |
-        sort --check=quiet --version-sort >/dev/null ; then
-    echo -e "\n${Cyan}There is a newer version of this script available.${Off}"
-    echo -e "Current version: ${scriptver}\nLatest version:  $tag"
-    scriptdl="$scriptpath/$script-$shorttag"
-    if [[ -f ${scriptdl}.tar.gz ]] || [[ -f ${scriptdl}.zip ]]; then
-        # They have the latest version tar.gz downloaded but are using older version
-        echo "You have the latest version downloaded but are using an older version"
-        sleep 10
-    elif [[ -d $scriptdl ]]; then
-        # They have the latest version extracted but are using older version
-        echo "You have the latest version extracted but are using an older version"
-        sleep 10
-    else
-        echo -e "${Cyan}Do you want to download $tag now?${Off} [y/n]"
-        read -r -t 30 reply
-        if [[ ${reply,,} == "y" ]]; then
-            # Delete previously downloaded .tar.gz file and extracted tmp files
-            cleanup_tmp
-
-            if cd /tmp; then
-                url="https://github.com/$repo/archive/refs/tags/$tag.tar.gz"
-                if ! curl -JLO -m 30 --connect-timeout 5 "$url"; then
-                    echo -e "${Error}ERROR${Off} Failed to download"\
-                        "$script-$shorttag.tar.gz!"
-                else
-                    if [[ -f /tmp/$script-$shorttag.tar.gz ]]; then
-                        # Extract tar file to /tmp/<script-name>
-                        if ! tar -xf "/tmp/$script-$shorttag.tar.gz" -C "/tmp"; then
-                            echo -e "${Error}ERROR${Off} Failed to"\
-                                "extract $script-$shorttag.tar.gz!"
-                        else
-                            # Set script sh files as executable
-                            if ! chmod a+x "/tmp/$script-$shorttag/"*.sh ; then
-                                permerr=1
-                                echo -e "${Error}ERROR${Off} Failed to set executable permissions"
-                            fi
-
-                            # Copy new script sh file to script location
-                            if ! cp -p "/tmp/$script-$shorttag/${scriptname}.sh" "${scriptpath}/${scriptfile}";
-                            then
-                                copyerr=1
-                                echo -e "${Error}ERROR${Off} Failed to copy"\
-                                    "$script-$shorttag sh file(s) to:\n $scriptpath/${scriptfile}"
-                            fi
-
-                            # Copy new CHANGES.txt file to script location (if script on a volume)
-                            if [[ $scriptpath =~ /volume* ]]; then
-                                # Set permissions on CHANGES.txt
-                                if ! chmod 664 "/tmp/$script-$shorttag/CHANGES.txt"; then
-                                    permerr=1
-                                    echo -e "${Error}ERROR${Off} Failed to set permissions on:"
-                                    echo "$scriptpath/CHANGES.txt"
-                                fi
-
-                                # Copy new CHANGES.txt file to script location
-                                if ! cp -p "/tmp/$script-$shorttag/CHANGES.txt"\
-                                    "${scriptpath}/${scriptname}_CHANGES.txt";
-                                then
-                                    echo -e "${Error}ERROR${Off} Failed to copy"\
-                                        "$script-$shorttag/CHANGES.txt to:\n $scriptpath"
-                                else
-                                    changestxt=" and changes.txt"
-                                fi
-                            fi
-
-                            # Delete downloaded tmp files
-                            cleanup_tmp
-
-                            # Notify of success (if there were no errors)
-                            if [[ $copyerr != 1 ]] && [[ $permerr != 1 ]]; then
-                                echo -e "\n$tag ${scriptfile}$changestxt downloaded to: ${scriptpath}\n"
-
-                                # Reload script
-                                printf -- '-%.0s' {1..79}; echo  # print 79 -
-                                exec "${scriptpath}/$scriptfile" "${args[@]}"
-                            fi
-                        fi
-                    else
-                        echo -e "${Error}ERROR${Off}"\
-                            "/tmp/$script-$shorttag.tar.gz not found!"
-                        #ls /tmp | grep "$script"  # debug
-                    fi
-                fi
-                cd "$scriptpath" || echo -e "${Error}ERROR${Off} Failed to cd to script location!"
-            else
-                echo -e "${Error}ERROR${Off} Failed to cd to /tmp!"
-            fi
-        fi
-    fi
-fi
 
 #------------------------------------------------------------------------------
 
@@ -380,8 +246,8 @@ else
     echo -e "\nUnsupported or unknown CPU platform_name or architecture"
     echo "  - CPU type: $cputype"
     echo "  - Platform: $platform_name"
-    echo -e "Please create an issue at:"
-    echo -e "https://github.com/007revad/Video_Station_for_DSM_722/issues\n"
+    echo -e "Please see:"
+    echo -e "https://github.com/$repo\n"
     exit
 fi
 echo "Using CPU type: $cputype"
@@ -390,13 +256,24 @@ echo "Using CPU type: $cputype"
 
 cleanup(){ 
     arg1=$?
-    for s in /tmp/CodecPack-"${cputype}"-*.spk; do rm -f "$s"; done
-    for s in /tmp/VideoStation-"${cputype}"-*.spk; do rm -f "$s"; done
-    for s in /tmp/MediaServer-"${cputype}"-*.spk; do rm -f "$s"; done
+    # Delete this run's private download folder
+    if [[ -n $workdir ]]; then
+        rm -rf -- "$workdir"
+    fi
     exit "${arg1}"
 }
 
+workdir=""
 trap cleanup EXIT
+
+# Private download folder for this run (only root can read it)
+if ! workdir=$(mktemp -d /tmp/vs722.XXXXXX); then
+    workdir=""
+    ding
+    echo -e "${Error}ERROR${Off} Failed to create the private download folder in /tmp!"
+    echo "Nothing was changed on the NAS."
+    exit 1
+fi
 
 progbar(){ 
     # $1 is pid of process
@@ -561,7 +438,7 @@ package_install(){
     # $3 is /volume2 etc
     [ "$trace" == "yes" ] && echo "${FUNCNAME[0]} called from ${FUNCNAME[1]}"
     #/usr/syno/bin/synopkg install_from_server "$1" "$3" >/dev/null &
-    /usr/syno/bin/synopkg install "/tmp/$1" "$3" >/dev/null &
+    /usr/syno/bin/synopkg install "${workdir:?}/$1" "$3" >/dev/null &
     pid=$!
     if [[ $3 ]]; then
         string="Installing ${Cyan}${2}${Off} on ${Cyan}$3${Off}"
@@ -573,6 +450,57 @@ package_install(){
     progstatus "$?" "$string" "line ${LINENO}"
 }
 
+pkg_sha256(){ 
+    # $1 is the package file name
+    # SHA-256 of each package file as downloaded from Synology (certificate check on)
+    case "$1" in
+        CodecPack-armada37xx-3.1.0-3005.spk)
+            echo "5db7166d7186004e72eb8bc2d650a8dd8a17760afe141c9dc3aedec13bf0119b" ;;
+        CodecPack-armada38x-3.1.0-3005.spk)
+            echo "496a6276aa7bf79fcdca238d6078bf890b25384ff445b357165b8766111b5717" ;;
+        CodecPack-armv7-3.1.0-3005.spk)
+            echo "e38bb5dc81b7ac4551162c42ae2e3f2cf64b767624669bf65ca0dd53dbb9a185" ;;
+        CodecPack-monaco-3.1.0-3005.spk)
+            echo "b6917fadbcc5f8c26a1a6cd694ffe9928fcaba0890df3dad9827a27ad5169e90" ;;
+        CodecPack-rtd1296-3.1.0-3005.spk)
+            echo "6c46f434c02f0a56071844ec67fd91051179f543a18457d6b7e22bee9c13a743" ;;
+        CodecPack-rtd1619b-3.1.0-3005.spk)
+            echo "d50b70dc1d89c607cd545d5ab70b6d047355cf13aa628823ef63079b3b54d44d" ;;
+        CodecPack-x86_64-3.1.0-3005.spk)
+            echo "c4dcb4ab66cdd83cba7dcb909658bb239feab0325bfa794e3925c87e8656b85a" ;;
+        VideoStation-armada37xx-3.1.0-3153.spk)
+            echo "cc5070f3d6794ec6740301e7cc8698cd100d49d008ac634d37aeaf77912ab977" ;;
+        VideoStation-armada38x-3.1.0-3153.spk)
+            echo "e93727ea8495753017dc635ed352b40a1dec14995eda9cf7d7bd045c9357928f" ;;
+        VideoStation-armv7-3.1.0-3153.spk)
+            echo "5b4cfc4bd43b0c4f896a38f850f09d4673ae49e9d72eeea0180865d9a7e28230" ;;
+        VideoStation-monaco-3.1.0-3153.spk)
+            echo "8c1dd917b28c9184ef5bcecf6087e24d48ea65fd0ad457f37f9e03ae95236963" ;;
+        VideoStation-rtd1296-3.1.0-3153.spk)
+            echo "4f94403b959c1697ea1b21b5decff4777201ada72370dd31c45ecbadcdf00d4d" ;;
+        VideoStation-rtd1619b-3.1.0-3153.spk)
+            echo "d38267b4cdae6f2e69ba45a76aa9554cfbd5b503264783c68284f060f80325fd" ;;
+        VideoStation-x86_64-3.1.0-3153.spk)
+            echo "e9b1a4935e255aac649953fa6b8a10ebcb3114970552dcf00b9ff93d62065715" ;;
+        MediaServer-armada37xx-2.0.5-3152.spk)
+            echo "17e11f8146a62712861cb1c8df9a223a5eee02fe7ea08cd86899ba2d3f4366a8" ;;
+        MediaServer-armada38x-2.0.5-3152.spk)
+            echo "3d90c6157b7e01bb2c46901f35224a8d7530bf28b69db2e48c0daf070b6cda53" ;;
+        MediaServer-armv7-2.0.5-3152.spk)
+            echo "87da07b1d33b56c2186b682a1dbb313d4f4889fae39947c34276fce951ba379b" ;;
+        MediaServer-monaco-2.0.5-3152.spk)
+            echo "5e8aa508b5ae772bc30356e8e39b86e4b215b4b67fa2898b4b7d63f37b9259b1" ;;
+        MediaServer-rtd1296-2.0.5-3152.spk)
+            echo "fa82ac4d020ffd7b79d793191bdda102b3866434c6879ce47a69d29c17f4364a" ;;
+        MediaServer-rtd1619b-2.0.5-3152.spk)
+            echo "62c467ddc566f8c5afee6ba2be05ff029cc9a09c1926c51aa9a6eab355e51564" ;;
+        MediaServer-x86_64-2.0.5-3152.spk)
+            echo "38e77b230f339e78721e7bdb7543ed56c48ff84564665220dcd62baa5fb32e8e" ;;
+        *)
+            return 1 ;;
+    esac
+}
+
 download_pkg(){ 
     # $1 is the package folder name
     # $2 is the package version to download
@@ -582,6 +510,23 @@ download_pkg(){
     # https://global.synologydownload.com/download/Package/spk/VideoStation/3.1.0-3153/VideoStation-x86_64-3.1.0-3153.spk
 
     local url
+    local host
+    local file
+    local expected
+    local actual
+    local curlcode
+
+    # Can't check the download without sha256sum
+    if ! command -v sha256sum >/dev/null 2>&1; then
+        ding
+        echo -e "${Error}ERROR 3${Off} sha256sum not found so ${3:?} can't be checked!"
+        echo "Nothing was changed on the NAS."
+        exit 3
+    fi
+
+    file="${workdir:?}/${3:?}"
+    expected=$(pkg_sha256 "$3")
+
     language=$(synogetkeyvalue /etc/synoinfo.conf language)
     if [[ $language =~ chs|cht ]] && readlink -q /etc/localtime | grep -iq china;
     then
@@ -594,25 +539,55 @@ download_pkg(){
         bases+=("https://global.download.synology.com/download/Package/spk/")
         bases+=("https://cndl.synology.cn/download/Package/spk/")
     fi
-    if [[ ! -f "/tmp/${3:?}" ]]; then
-        for base in "${bases[@]}"; do
-            url="${base}${1:?}/${2:?}/${3:?}"
-            echo -en "\nDownloading ${Cyan}${3}${Off} from "
-            echo "$base" | cut -d"/" -f3
-            #if curl -kfL --connect-timeout 30 --retry 5 --retry-all-errors "$url" -o "/tmp/$3"; then
-            if curl -kfL --connect-timeout 30 --retry 1 "$url" -o "/tmp/$3"; then
-                if [[ -f "/tmp/$3" ]]; then
-                    break
-                fi
+    # Never reuse a file that is already there
+    rm -f -- "$file"
+    for base in "${bases[@]}"; do
+        url="${base}${1:?}/${2:?}/${3}"
+        host=$(echo "$base" | cut -d"/" -f3)
+        echo -en "\nDownloading ${Cyan}${3}${Off} from "
+        echo "$host"
+        curl -q -fL --proto '=https' --proto-redir '=https' --connect-timeout 30 --retry 1 "$url" -o "$file"
+        curlcode=$?
+        if [[ $curlcode != "0" ]]; then
+            # Delete partial download
+            rm -f -- "$file"
+            if [[ $curlcode == "60" ]] || [[ $curlcode == "77" ]]; then
+                echo -e "${Error}ERROR${Off} Certificate check failed for $host!"
+                echo "Check the NAS date and time are correct, and update DSM."
+            else
+                echo -e "${Error}ERROR${Off} Failed to download ${3} from $host (curl exit code $curlcode)!"
             fi
-        done
-    fi
-    if [[ ! -f "/tmp/${3:?}" ]]; then
+            continue
+        fi
+        if [[ -z $expected ]]; then
+            rm -f -- "$file"
+            echo -e "${Error}ERROR${Off} No SHA-256 checksum is recorded for ${3}!"
+            continue
+        fi
+        actual=$(sha256sum "$file" 2>/dev/null | cut -d" " -f1)
+        if [[ $actual != "$expected" ]]; then
+            rm -f -- "$file"
+            echo -e "${Error}ERROR${Off} SHA-256 checksum check failed for ${3} from $host!"
+            echo "  Expected: $expected"
+            echo "  Actual:   $actual"
+            continue
+        fi
+        echo "SHA-256 checksum OK"
+        return 0
+    done
+    rm -f -- "$file"
+    ding
+    echo -e "${Error}ERROR 3${Off} Failed to download ${3}!"
+    echo "Nothing was changed on the NAS."
+    exit 3
+}
+
+need_pkg_file(){ 
+    # $1 is the package file that must already be downloaded and checked
+    if [[ ! -f "${workdir:?}/${1:?}" ]]; then
         ding
-        echo -e "${Error}ERROR 3${Off} Failed to download ${3}!"
-        exit 3
-    else
-        echo ""
+        echo -e "${Error}ERROR${Off} ${1} was not downloaded before changes were made!"
+        exit 1
     fi
 }
 
@@ -660,6 +635,46 @@ else
 fi
 
 
+# Work out which packages may be needed (this does not change anything)
+need_ame=""
+need_vs=""
+need_ms=""
+ame_version=$(/usr/syno/bin/synopkg version CodecPack)
+if ! check_pkg_installed CodecPack || [[ ${ame_version:0:1} -gt "3" ]]; then
+    need_ame="yes"
+fi
+if [[ $no_vs != "yes" ]]; then
+    vs_version=$(/usr/syno/bin/synopkg version VideoStation)
+    if ! check_pkg_installed VideoStation || [[ ${vs_version} != "30.1.0-3153" ]]; then
+        need_vs="yes"
+    elif [[ ${ame_version:0:1} -gt "3" ]]; then
+        # Uninstalling AME v4 could also remove Video Station
+        need_vs="yes"
+    fi
+fi
+if [[ $no_ms != "yes" ]]; then
+    ms_version=$(/usr/syno/bin/synopkg version MediaServer)
+    if ! check_pkg_installed MediaServer || [[ ${ms_version} != "20.0.5-3152" ]]; then
+        need_ms="yes"
+    elif [[ ${ame_version:0:1} -gt "3" ]]; then
+        # Uninstalling AME v4 could also remove Media Server
+        need_ms="yes"
+    fi
+fi
+
+# Download and check every package needed before changing anything
+if [[ $need_ame == "yes" ]]; then
+    download_pkg CodecPack "3.1.0-3005" "CodecPack-${cputype}-3.1.0-3005.spk"
+fi
+if [[ $need_vs == "yes" ]]; then
+    #download_pkg VideoStation "3.1.1-3168" "VideoStation-${cputype}-3.1.0-3168.spk"
+    download_pkg VideoStation "3.1.0-3153" "VideoStation-${cputype}-3.1.0-3153.spk"
+fi
+if [[ $need_ms == "yes" ]]; then
+    download_pkg MediaServer "2.0.5-3152" "MediaServer-${cputype}-2.0.5-3152.spk"
+fi
+
+
 # Backup synopackageslimit.conf if needed
 if [[ ! -f /etc.defaults/synopackageslimit.conf.bak ]]; then
     cp -p /etc.defaults/synopackageslimit.conf /etc.defaults/synopackageslimit.conf.bak
@@ -675,17 +690,15 @@ fi
 /usr/syno/bin/synosetkeyvalue /etc.defaults/synopackageslimit.conf MediaServer "2.0.5-3152"
 /usr/syno/bin/synosetkeyvalue /etc/synopackageslimit.conf MediaServer "2.0.5-3152"
 
-# Get installed AME version
-ame_version=$(/usr/syno/bin/synopkg version CodecPack)
+# Uninstall AME v4 if installed
 if [[ ${ame_version:0:1} -gt "3" ]]; then
     # Uninstall AME v4
     echo ""
     package_uninstall CodecPack "Advanced Media Extensions"
 fi
 
-# Get installed VideoStation version
+# Uninstall VideoStation if wrong version
 if [[ $no_vs != "yes" ]]; then
-    vs_version=$(/usr/syno/bin/synopkg version VideoStation)
     #if check_pkg_installed VideoStation && [[ ${vs_version:0:2} != "30" ]]; then
     if check_pkg_installed VideoStation && [[ ${vs_version} != "30.1.0-3153" ]]; then
         # Uninstall VideoStation (wrong version)
@@ -694,9 +707,8 @@ if [[ $no_vs != "yes" ]]; then
     fi
 fi
 
-# Get installed MediaServer version
+# Uninstall MediaServer if wrong version
 if [[ $no_ms != "yes" ]]; then
-    ms_version=$(/usr/syno/bin/synopkg version MediaServer)
     #if check_pkg_installed MediaServer && [[ ${ms_version:0:2} != "20" ]]; then
     if check_pkg_installed MediaServer && [[ ${ms_version} != "20.0.5-3152" ]]; then
         # Uninstall MediaServer (wrong version)
@@ -705,25 +717,54 @@ if [[ $no_ms != "yes" ]]; then
     fi
 fi
 
+# Check the uninstalls worked before installing anything
+if check_pkg_installed CodecPack; then
+    ame_version=$(/usr/syno/bin/synopkg version CodecPack)
+    if [[ ${ame_version:0:1} -gt "3" ]]; then
+        ding
+        echo -e "${Error}ERROR${Off} Uninstalling Advanced Media Extensions $ame_version didn't work!"
+        echo "Stopping so nothing is installed over it."
+        exit 1
+    fi
+fi
+if [[ $no_vs != "yes" ]] && check_pkg_installed VideoStation; then
+    vs_version=$(/usr/syno/bin/synopkg version VideoStation)
+    if [[ ${vs_version} != "30.1.0-3153" ]]; then
+        ding
+        echo -e "${Error}ERROR${Off} Uninstalling Video Station $vs_version didn't work!"
+        echo "Stopping so nothing is installed over it."
+        exit 1
+    fi
+fi
+if [[ $no_ms != "yes" ]] && check_pkg_installed MediaServer; then
+    ms_version=$(/usr/syno/bin/synopkg version MediaServer)
+    if [[ ${ms_version} != "20.0.5-3152" ]]; then
+        ding
+        echo -e "${Error}ERROR${Off} Uninstalling Media Server $ms_version didn't work!"
+        echo "Stopping so nothing is installed over it."
+        exit 1
+    fi
+fi
+
 # CodecPack (Advanced Media Extensions)
-if ! check_pkg_installed CodecPack && [[ $ame_version != "30.1.0-3005" ]]; then
-    download_pkg CodecPack "3.1.0-3005" "CodecPack-${cputype}-3.1.0-3005.spk"
+if ! check_pkg_installed CodecPack; then
+    need_pkg_file "CodecPack-${cputype}-3.1.0-3005.spk"
     package_install "CodecPack-${cputype}-3.1.0-3005.spk" "Advanced Media Extensions"
     package_stop CodecPack "Advanced Media Extensions"
     # Prevent package updating and "update available" messages
     echo "Preventing Advanced Media Extensions from auto updating"
     /usr/syno/bin/synosetkeyvalue /var/packages/CodecPack/INFO version "30.1.0-3005"
     package_start CodecPack "Advanced Media Extensions"
-    rm -f "/tmp/CodecPack-${cputype}-3.1.0-3005.spk"
+    rm -f "$workdir/CodecPack-${cputype}-3.1.0-3005.spk"
 else
+    ame_version=$(/usr/syno/bin/synopkg version CodecPack)
     echo -e "\n${Cyan}Advanced Media Extensions${Off} $ame_version already installed"
 fi
 
 # VideoStation
 if [[ $no_vs != "yes" ]]; then
-    if ! check_pkg_installed VideoStation && [[ $vs_version != "30.1.0-3153" ]]; then
-        #download_pkg VideoStation "3.1.1-3168" "VideoStation-${cputype}-3.1.0-3168.spk"
-        download_pkg VideoStation "3.1.0-3153" "VideoStation-${cputype}-3.1.0-3153.spk"
+    if ! check_pkg_installed VideoStation; then
+        need_pkg_file "VideoStation-${cputype}-3.1.0-3153.spk"
         #package_install "VideoStation-${cputype}-3.1.1-3168.spk" "Video Station"
         package_install "VideoStation-${cputype}-3.1.0-3153.spk" "Video Station"
         package_stop VideoStation "Video Station"
@@ -732,25 +773,27 @@ if [[ $no_vs != "yes" ]]; then
         #/usr/syno/bin/synosetkeyvalue /var/packages/VideoStation/INFO version "30.1.1-3168"
         /usr/syno/bin/synosetkeyvalue /var/packages/VideoStation/INFO version "30.1.0-3153"
         package_start VideoStation "Video Station"
-        #rm -f "/tmp/VideoStation-${cputype}-3.1.0-3168.spk"
-        rm -f "/tmp/VideoStation-${cputype}-3.1.0-3153.spk"
+        #rm -f "$workdir/VideoStation-${cputype}-3.1.0-3168.spk"
+        rm -f "$workdir/VideoStation-${cputype}-3.1.0-3153.spk"
     else
+        vs_version=$(/usr/syno/bin/synopkg version VideoStation)
         echo -e "\n${Cyan}Video Station${Off} $vs_version already installed"
     fi
 fi
 
 # MediaServer
 if [[ $no_ms != "yes" ]]; then
-    if ! check_pkg_installed MediaServer && [[ $ms_version != "20.0.5-3152" ]]; then
-        download_pkg MediaServer "2.0.5-3152" "MediaServer-${cputype}-2.0.5-3152.spk"
+    if ! check_pkg_installed MediaServer; then
+        need_pkg_file "MediaServer-${cputype}-2.0.5-3152.spk"
         package_install "MediaServer-${cputype}-2.0.5-3152.spk" "Media Server"
         package_stop MediaServer "Media Server"
         # Prevent package updating and "update available" messages
         echo "Preventing Media Server from auto updating"
         /usr/syno/bin/synosetkeyvalue /var/packages/MediaServer/INFO version "20.0.5-3152"
         package_start MediaServer "Media Server"
-        rm -f "/tmp/MediaServer-${cputype}-2.0.5-3152.spk"
+        rm -f "$workdir/MediaServer-${cputype}-2.0.5-3152.spk"
     else
+        ms_version=$(/usr/syno/bin/synopkg version MediaServer)
         echo -e "\n${Cyan}Media Server${Off} $ms_version already installed"
     fi
 fi

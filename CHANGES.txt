@@ -1,3 +1,10 @@
+v1.4.22-hbt.1
+- Changed to check the HTTPS certificate when downloading packages, and to only allow HTTPS (also after a redirect).
+- Added a SHA-256 check for every package file. A file with no checksum or the wrong checksum is deleted and the next download server is tried.
+- Changed to download packages into a private folder for each run. A package file already in /tmp is never used.
+- Changed to download and check every package before changing anything on the NAS. Exits with code 3 if no server works.
+- Removed the self-updater. To update, download a new copy of the script.
+
 v1.4.22
 - Changed to try 3 different Synology download domains to download the spk file(s).
 
