@@ -214,6 +214,10 @@ class VolumeTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual(calls, [])
 
+
+class HelperSourceTests(unittest.TestCase):
+    """Checks that read the helper's source, so they don't need jq."""
+
     def test_web_api_calls_have_a_time_limit(self):
         source = LIBRARY.read_text()
         body = source.split("volume_webapi(){", 1)[1].split("\n}", 1)[0]
